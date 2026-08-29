@@ -11,12 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AtendimentosRouteImport } from './routes/atendimentos'
+import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NegociosRouteImport } from './routes/negocios'
+import { Route as OrcamentosRouteImport } from './routes/orcamentos'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as TarefasRouteImport } from './routes/tarefas'
+import { Route as LeadLeadIdRouteImport } from './routes/lead.$leadId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -26,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 const AtendimentosRoute = AtendimentosRouteImport.update({
   id: '/atendimentos',
   path: '/atendimentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientesRoute = ClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
@@ -48,6 +56,11 @@ const NegociosRoute = NegociosRouteImport.update({
   path: '/negocios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrcamentosRoute = OrcamentosRouteImport.update({
+  id: '/orcamentos',
+  path: '/orcamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
@@ -58,80 +71,106 @@ const TarefasRoute = TarefasRouteImport.update({
   path: '/tarefas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeadLeadIdRoute = LeadLeadIdRouteImport.update({
+  id: '/lead/$leadId',
+  path: '/lead/$leadId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/atendimentos': typeof AtendimentosRoute
+  '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/financeiro': typeof FinanceiroRoute
   '/login': typeof LoginRoute
   '/negocios': typeof NegociosRoute
+  '/orcamentos': typeof OrcamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/tarefas': typeof TarefasRoute
+  '/lead/$leadId': typeof LeadLeadIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/atendimentos': typeof AtendimentosRoute
+  '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/financeiro': typeof FinanceiroRoute
   '/login': typeof LoginRoute
   '/negocios': typeof NegociosRoute
+  '/orcamentos': typeof OrcamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/tarefas': typeof TarefasRoute
+  '/lead/$leadId': typeof LeadLeadIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/atendimentos': typeof AtendimentosRoute
+  '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/financeiro': typeof FinanceiroRoute
   '/login': typeof LoginRoute
   '/negocios': typeof NegociosRoute
+  '/orcamentos': typeof OrcamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/tarefas': typeof TarefasRoute
+  '/lead/$leadId': typeof LeadLeadIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/atendimentos'
+    | '/clientes'
     | '/configuracoes'
     | '/financeiro'
     | '/login'
     | '/negocios'
+    | '/orcamentos'
     | '/relatorios'
     | '/tarefas'
+    | '/lead/$leadId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/atendimentos'
+    | '/clientes'
     | '/configuracoes'
     | '/financeiro'
     | '/login'
     | '/negocios'
+    | '/orcamentos'
     | '/relatorios'
     | '/tarefas'
+    | '/lead/$leadId'
   id:
     | '__root__'
     | '/'
     | '/atendimentos'
+    | '/clientes'
     | '/configuracoes'
     | '/financeiro'
     | '/login'
     | '/negocios'
+    | '/orcamentos'
     | '/relatorios'
     | '/tarefas'
+    | '/lead/$leadId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AtendimentosRoute: typeof AtendimentosRoute
+  ClientesRoute: typeof ClientesRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   FinanceiroRoute: typeof FinanceiroRoute
   LoginRoute: typeof LoginRoute
   NegociosRoute: typeof NegociosRoute
+  OrcamentosRoute: typeof OrcamentosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TarefasRoute: typeof TarefasRoute
+  LeadLeadIdRoute: typeof LeadLeadIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -148,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/atendimentos'
       fullPath: '/atendimentos'
       preLoaderRoute: typeof AtendimentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clientes': {
+      id: '/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof ClientesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/configuracoes': {
@@ -178,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NegociosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/orcamentos': {
+      id: '/orcamentos'
+      path: '/orcamentos'
+      fullPath: '/orcamentos'
+      preLoaderRoute: typeof OrcamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/relatorios': {
       id: '/relatorios'
       path: '/relatorios'
@@ -192,18 +245,28 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TarefasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lead/$leadId': {
+      id: '/lead/$leadId'
+      path: '/lead/$leadId'
+      fullPath: '/lead/$leadId'
+      preLoaderRoute: typeof LeadLeadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AtendimentosRoute: AtendimentosRoute,
+  ClientesRoute: ClientesRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   FinanceiroRoute: FinanceiroRoute,
   LoginRoute: LoginRoute,
   NegociosRoute: NegociosRoute,
+  OrcamentosRoute: OrcamentosRoute,
   RelatoriosRoute: RelatoriosRoute,
   TarefasRoute: TarefasRoute,
+  LeadLeadIdRoute: LeadLeadIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -10,7 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-hostinger
+dist-hostinger.zip
 scratch
+supabase_migrations/
 dist-ssr
 .output
 .vinxi
@@ -18,6 +20,7 @@ dist-ssr
 .nitro
 *.local
 .env
+.mcp.json
 
 # Wrangler / Cloudflare
 .wrangler/

@@ -3,6 +3,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 async function main() {
+  // Na Vercel o Nitro gera a saida em .vercel/output (preset proprio da plataforma),
+  // entao esse pos-build especifico do Hostinger nao se aplica e deve ser pulado.
+  if (process.env.VERCEL) {
+    console.log("\n⏭️  [Hostinger Build] Build rodando na Vercel — pulando geracao de arquivos para Hostinger.");
+    return;
+  }
+
   console.log("\n📦 [Hostinger Build] Gerando arquivos estáticos para publicação na Hostinger...");
 
   const rootDir = process.cwd();

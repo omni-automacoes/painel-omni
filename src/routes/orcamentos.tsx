@@ -89,6 +89,7 @@ type OrcamentoRecord = {
   raciocinio_tecnico?: string;
   opcoes_orcamento?: OpcoesOrcamento;
   perguntas_comerciais?: string[];
+  respostas_perguntas_comerciais?: (string | null)[] | null;
   responsavel?: string;
   lead_id?: string | null;
   leads?: LeadMinimal | null;
@@ -142,6 +143,9 @@ function OrcamentosPage() {
   /* Modal de Atribuição de Lead */
   const [modalAssignOrcamento, setModalAssignOrcamento] = useState<OrcamentoRecord | null>(null);
   const [leadModalSearch, setLeadModalSearch] = useState("");
+
+  /* Respostas do Comercial às Perguntas Estratégicas (rascunho local por índice da pergunta) */
+  const [respostaDrafts, setRespostaDrafts] = useState<Record<number, string>>({});
 
   /* Estado do Timer de Carregamento */
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -208,6 +212,47 @@ function OrcamentosPage() {
     },
     onError: (err: any) => {
       toast.error("Erro ao atribuir lead: " + err.message);
+    },
+  });
+
+  /* 3.1 Mutation para o Comercial Salvar a Resposta de uma Pergunta Estratégica */
+  const saveRespostaMutation = useMutation({
+    mutationFn: async ({
+      orcamentoId,
+      index,
+      resposta,
+      respostasAtuais,
+      totalPerguntas,
+    }: {
+      orcamentoId: number | string;
+      index: number;
+      resposta: string;
+      respostasAtuais: (string | null)[];
+      totalPerguntas: number;
+    }) => {
+      const novasRespostas = [...respostasAtuais];
+      while (novasRespostas.length < totalPerguntas) novasRespostas.push(null);
+      novasRespostas[index] = resposta.trim() || null;
+
+      const { error } = await supabase
+        .from("orcamentos")
+        .update({ respostas_perguntas_comerciais: novasRespostas })
+        .eq("orcamento_id", orcamentoId);
+
+      if (error) throw error;
+      return { orcamentoId, novasRespostas };
+    },
+    onSuccess: ({ orcamentoId, novasRespostas }) => {
+      queryClient.invalidateQueries({ queryKey: ["orcamentos_list"] });
+      setActiveOrcamento((prev) =>
+        prev && String(prev.orcamento_id) === String(orcamentoId)
+          ? { ...prev, respostas_perguntas_comerciais: novasRespostas }
+          : prev
+      );
+      toast.success("Resposta salva com sucesso!");
+    },
+    onError: (err: any) => {
+      toast.error("Erro ao salvar resposta: " + err.message);
     },
   });
 
@@ -321,6 +366,11 @@ function OrcamentosPage() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  /* Limpa os rascunhos de resposta ao trocar de orçamento ativo */
+  useEffect(() => {
+    setRespostaDrafts({});
+  }, [activeOrcamento?.orcamento_id]);
 
   /* Validação pré-envio para abrir o modal de confirmação */
   const handlePreSend = () => {
@@ -990,21 +1040,84 @@ function OrcamentosPage() {
 
             </div>
 
-            {/* Perguntas Comerciais */}
+            {/* Perguntas Comerciais + Respostas do Comercial */}
             {activeOrcamento.perguntas_comerciais && activeOrcamento.perguntas_comerciais.length > 0 && (
               <div className="rounded-2xl border border-amber-500/30 bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-3">
                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-2">
                   <HelpCircle className="size-4" /> Perguntas Estratégicas de Alinhamento Comercial
                 </h4>
-                <div className="space-y-2">
-                  {activeOrcamento.perguntas_comerciais.map((pergunta, i) => (
-                    <div key={i} className="rounded-xl border border-border/80 bg-secondary/40 p-3.5 text-xs text-slate-200 flex items-start gap-2.5">
-                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-amber-500/20 text-[10px] font-bold text-amber-400">
-                        {i + 1}
-                      </span>
-                      <p className="leading-relaxed">{pergunta}</p>
-                    </div>
-                  ))}
+                <p className="text-[11px] text-muted-foreground -mt-2">
+                  O comercial responde aqui embaixo de cada pergunta. As respostas ficam salvas junto ao orçamento para o time técnico consultar.
+                </p>
+                <div className="space-y-3">
+                  {activeOrcamento.perguntas_comerciais.map((pergunta, i) => {
+                    const totalPerguntas = activeOrcamento.perguntas_comerciais!.length;
+                    const respostaSalva = activeOrcamento.respostas_perguntas_comerciais?.[i] || "";
+                    const draft = respostaDrafts[i] ?? respostaSalva;
+                    const isAnswered = !!respostaSalva.trim();
+                    const isDirty = draft.trim() !== respostaSalva.trim();
+                    const orcamentoId = activeOrcamento.orcamento_id;
+
+                    return (
+                      <div key={i} className="rounded-xl border border-border/80 bg-secondary/40 p-3.5 text-xs text-slate-200 space-y-2.5">
+                        <div className="flex items-start gap-2.5">
+                          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-amber-500/20 text-[10px] font-bold text-amber-400">
+                            {i + 1}
+                          </span>
+                          <p className="leading-relaxed font-semibold text-foreground">{pergunta}</p>
+                        </div>
+
+                        <div className="pl-7 space-y-2">
+                          <textarea
+                            value={draft}
+                            onChange={(e) =>
+                              setRespostaDrafts((prev) => ({ ...prev, [i]: e.target.value }))
+                            }
+                            rows={2}
+                            placeholder="Resposta do comercial sobre este ponto..."
+                            className="w-full rounded-lg border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-accent/60 resize-none leading-relaxed"
+                          />
+
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 text-[10px] font-bold",
+                                isAnswered ? "text-emerald-400" : "text-amber-400"
+                              )}
+                            >
+                              {isAnswered ? (
+                                <>
+                                  <CheckCircle2 className="size-3" /> Respondida
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="size-3" /> Aguardando resposta do comercial
+                                </>
+                              )}
+                            </span>
+
+                            <button
+                              type="button"
+                              disabled={!isDirty || !orcamentoId || saveRespostaMutation.isPending}
+                              onClick={() =>
+                                saveRespostaMutation.mutate({
+                                  orcamentoId: orcamentoId!,
+                                  index: i,
+                                  resposta: draft,
+                                  respostasAtuais: activeOrcamento.respostas_perguntas_comerciais || [],
+                                  totalPerguntas,
+                                })
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                            >
+                              <Check className="size-3" />
+                              Salvar resposta
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

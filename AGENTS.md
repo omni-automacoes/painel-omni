@@ -9,24 +9,13 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-## Regras de Desenvolvimento de Automações no N8N
+## Uso das Ferramentas MCP (N8N e Supabase)
 
-Ao criar, atualizar ou publicar automações no N8N, siga sempre estas regras obrigatórias:
-
-1. **Status, Prefixo e Nomenclatura do Título:**
-   - **Prefixo Obrigatório:** Todas as automações criadas devem obrigatoriamente incluir o prefixo `OMNI | `.
-   - **Em Desenvolvimento / Rascunho / Testes:** Iniciar obrigatoriamente o título com o emoji de círculo amarelo (`🟡`) seguido do prefixo `OMNI | `.  
-     *Exemplo:* `🟡 OMNI | Nova Automação de Leads`
-   - **Aprovado e Publicado / Ativo:** Iniciar obrigatoriamente o título com o emoji de círculo verde (`🟢`) seguido do prefixo `OMNI | `.  
-     *Exemplo:* `🟢 OMNI | Nova Automação de Leads`
-
-2. **Fuso Horário (Timezone):**
-   - O fuso horário de todas as automações deve ser configurado como **São Paulo** (`America/Sao_Paulo`).
-
-3. **Tratamento e Notificação de Erros:**
-   - Em caso de erro na execução da automação, é obrigatório conectar a notificação para acionar o workflow centralizador de erros:
-     - **ID da Automação de Erro:** `l-fP7Ezi_AGWW03hdCWJQ`
-     - **Nome da Automação de Erro:** `🟢 GERAL | Notificar ERRO em Automação`
+Ao usar as conexões MCP deste projeto (declaradas em [.mcp.json](.mcp.json)) para criar/editar
+automações no N8N ou consultar/alterar dados no Supabase, siga estritamente as regras do arquivo
+[MCP_GUIDELINES.md](MCP_GUIDELINES.md) — em especial: nunca publicar/ativar uma automação N8N sem
+autorização explícita do usuário, e nunca acessar no Supabase nenhum projeto além do `Painel Omni`
+(`evlccmkqzbjmoptfiurx`).
 
 ## Diretrizes de Lançamentos Financeiros & Validação de Dados
 

@@ -10,23 +10,15 @@ import {
   X,
   LayoutList,
   Columns3,
-  CircleDot,
   Clock,
   CheckCircle2,
-  Calendar,
-  User,
   Trash2,
   ExternalLink,
   Search,
-  AlertCircle,
-  Tag,
   CalendarDays,
   AlertTriangle,
   RotateCcw,
   FastForward,
-  ChevronDown,
-  ChevronRight,
-  Filter,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { cn } from "@/lib/utils";
@@ -63,18 +55,19 @@ interface TarefaItem {
   lead_telefone?: string | null;
 }
 
+/* Prioridade e situação: cor sempre acompanhada de rótulo em texto. */
 const PRIORIDADES = {
-  urgente: { label: "Urgente", cls: "text-red-400 bg-red-500/15 border-red-500/30" },
-  alta: { label: "Alta", cls: "text-amber-400 bg-amber-500/15 border-amber-500/30" },
-  media: { label: "Média", cls: "text-blue-400 bg-blue-500/15 border-blue-500/30" },
-  baixa: { label: "Baixa", cls: "text-slate-400 bg-slate-500/15 border-slate-500/30" },
+  urgente: { label: "Urgente", badge: "omni-badge--danger" },
+  alta: { label: "Alta", badge: "omni-badge--warning" },
+  media: { label: "Média", badge: "omni-badge--info" },
+  baixa: { label: "Baixa", badge: "omni-badge--outline" },
 } as const;
 
 const STATUS_MAP = {
-  pendente: { label: "Pendente", cls: "text-amber-400 bg-amber-500/15 border-amber-500/30", Icon: CircleDot },
-  em_andamento: { label: "Em Andamento", cls: "text-blue-400 bg-blue-500/15 border-blue-500/30", Icon: Clock },
-  concluida: { label: "Concluída", cls: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30", Icon: CheckCircle2 },
-  cancelada: { label: "Cancelada", cls: "text-slate-400 bg-slate-500/15 border-slate-500/30", Icon: X },
+  pendente: { label: "Pendente", badge: "omni-badge--warning" },
+  em_andamento: { label: "Em andamento", badge: "omni-badge--info" },
+  concluida: { label: "Concluída", badge: "omni-badge--success" },
+  cancelada: { label: "Cancelada", badge: "omni-badge--outline" },
 } as const;
 
 function todayISO() {
@@ -108,10 +101,11 @@ function TarefasPage() {
 
   const [view, setView] = useState<"lista" | "quadro">("lista");
   const [search, setSearch] = useState("");
-  const [filterBucket, setFilterBucket] = useState<"todas" | "atrasadas" | "hoje" | "proximas" | "concluidas">("todas");
+  const [filterBucket, setFilterBucket] = useState<
+    "todas" | "atrasadas" | "hoje" | "proximas" | "concluidas"
+  >("todas");
   const [prioFilter, setPrioFilter] = useState("todas");
   const [modalOpen, setModalOpen] = useState(false);
-  const [showConcluidasGroup, setShowConcluidasGroup] = useState(false);
 
   /* Form state */
   const [titulo, setTitulo] = useState("");
@@ -120,6 +114,7 @@ function TarefasPage() {
   const [prioridade, setPrioridade] = useState<TarefaItem["prioridade"]>("media");
   const [descricao, setDescricao] = useState("");
   const [saving, setSaving] = useState(false);
+  const [tituloInvalido, setTituloInvalido] = useState(false);
 
   /* Fetch tarefas com lead */
   const { data: tarefas = [], isLoading } = useQuery<TarefaItem[]>({
@@ -288,7 +283,12 @@ function TarefasPage() {
   /* Create Task Handler */
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!titulo.trim()) { toast.error("Informe o título da tarefa!"); return; }
+    if (!titulo.trim()) {
+      setTituloInvalido(true);
+      toast.error("Informe o título da tarefa!");
+      return;
+    }
+    setTituloInvalido(false);
     setSaving(true);
     try {
       const { error } = await supabase.from("tarefas").insert([
@@ -315,116 +315,217 @@ function TarefasPage() {
     }
   };
 
-  /* Helper para renderizar linhas da tarefa */
+  /* Cartão de tarefa usado nas colunas do quadro. */
+  const TaskCard = ({
+    t,
+    tone,
+  }: {
+    t: TarefaItem;
+    tone: "atraso" | "hoje" | "futuro" | "feito";
+  }) => {
+    const isDone = t.status === "concluida";
+    const prio = PRIORIDADES[t.prioridade] || PRIORIDADES.media;
+
+    return (
+      <div
+        className={cn(
+          "omni-card omni-card--flat group flex flex-col gap-2.5 p-3",
+          tone === "atraso" && "border-danger bg-danger-soft",
+          tone === "hoje" && "border-warning bg-warning-soft",
+          tone === "feito" && "bg-surface-2",
+        )}
+      >
+        <div className="flex items-start gap-2">
+          <button
+            type="button"
+            onClick={() => toggleStatusMutation.mutate(t)}
+            className="mt-0.5 shrink-0 rounded-xs text-ink-faint transition-colors hover:text-success"
+            title={isDone ? "Reabrir tarefa" : "Marcar como concluída"}
+          >
+            {isDone ? (
+              <CheckCircle2 className="size-4 text-success" />
+            ) : (
+              <Square className="size-4" />
+            )}
+            <span className="omni-sr">
+              {isDone ? "Reabrir" : "Concluir"} {t.titulo}
+            </span>
+          </button>
+          <p
+            className={cn(
+              "flex-1 text-sm font-medium leading-snug text-ink",
+              isDone && "text-ink-3 line-through",
+            )}
+          >
+            {t.titulo}
+          </p>
+        </div>
+
+        {t.lead_id && (
+          <Link
+            to="/lead/$leadId"
+            params={{ leadId: t.lead_id }}
+            className="omni-link inline-flex items-center gap-1 text-xs"
+          >
+            <ExternalLink className="size-3" /> {t.lead_nome || "Ver negócio"}
+          </Link>
+        )}
+
+        <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-2">
+          <span className="num text-xs text-ink-3">{formatDate(t.data_vencimento)}</span>
+          {tone === "atraso" ? (
+            <button
+              type="button"
+              onClick={() =>
+                rescheduleMutation.mutate({ tarefaId: t.tarefa_id, newDate: todayStr })
+              }
+              className="omni-btn omni-btn--quiet omni-btn--sm"
+            >
+              <RotateCcw /> Mover para hoje
+            </button>
+          ) : tone === "feito" ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`Excluir "${t.titulo}"?`)) {
+                  deleteMutation.mutate(t.tarefa_id);
+                }
+              }}
+              className="omni-btn omni-btn--quiet omni-btn--sm text-danger opacity-0 group-hover:opacity-100"
+            >
+              Excluir
+            </button>
+          ) : (
+            <span className={cn("omni-badge", prio.badge)}>{prio.label}</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /* Coluna do quadro. */
+  const BoardColumn = ({
+    title,
+    icon,
+    count,
+    empty,
+    children,
+  }: {
+    title: string;
+    icon: React.ReactNode;
+    count: number;
+    empty: string;
+    children: React.ReactNode;
+  }) => (
+    <div className="omni-card flex flex-col">
+      <div className="omni-card__header py-3">
+        <h2 className="omni-eyebrow flex items-center gap-1.5">
+          {icon} {title}
+        </h2>
+        <span className="omni-badge omni-badge--outline">{count}</span>
+      </div>
+      <div className="flex min-h-[240px] flex-col gap-2.5 p-3">
+        {count === 0 ? <p className="omni-small py-8 text-center">{empty}</p> : children}
+      </div>
+    </div>
+  );
+
+  /* Linha da tabela em modo lista. */
   const renderTaskRow = (t: TarefaItem) => {
     const isDone = t.status === "concluida";
-    const prio = PRIORIDADES[t.prioridade] || PRIORIDADES["media"];
-    const isAtrasada = !isDone && t.data_vencimento && t.data_vencimento < todayStr;
+    const prio = PRIORIDADES[t.prioridade] || PRIORIDADES.media;
+    const isAtrasada = !isDone && !!t.data_vencimento && t.data_vencimento < todayStr;
     const isHoje = !isDone && t.data_vencimento === todayStr;
     const diffDays = getDaysDiff(t.data_vencimento);
+    const st = STATUS_MAP[t.status] || STATUS_MAP.pendente;
 
     return (
       <tr
         key={t.tarefa_id}
         className={cn(
-          "transition-all group border-b border-border/40",
-          isAtrasada
-            ? "bg-red-500/[0.06] hover:bg-red-500/[0.10] border-l-4 border-l-red-500"
-            : isHoje
-            ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.08] border-l-4 border-l-[#fba834]"
-            : isDone
-            ? "opacity-50 hover:opacity-80"
-            : "hover:bg-white/[0.02]"
+          "group",
+          isAtrasada && "[&>td]:bg-danger-soft",
+          isHoje && "[&>td]:bg-warning-soft",
         )}
       >
-        <td className="w-12 px-5 py-3.5">
+        <td className="w-12">
           <button
             type="button"
             onClick={() => toggleStatusMutation.mutate(t)}
-            className="text-muted-foreground hover:text-accent transition-colors"
-            title={isDone ? "Reabrir tarefa" : "Concluir tarefa"}
+            className="rounded-xs text-ink-faint transition-colors hover:text-success"
+            title={isDone ? "Reabrir tarefa" : "Marcar como concluída"}
           >
             {isDone ? (
-              <CheckCircle2 className="size-5 text-emerald-400" />
+              <CheckCircle2 className="size-5 text-success" />
             ) : (
-              <Square className={cn("size-5", isAtrasada ? "text-red-400 hover:border-red-400" : "hover:border-accent")} />
+              <Square className="size-5" />
             )}
+            <span className="omni-sr">
+              {isDone ? "Reabrir" : "Concluir"} {t.titulo}
+            </span>
           </button>
         </td>
 
-        <td className="px-5 py-3.5">
+        <td>
           <div className="flex items-center gap-2">
-            <p className={cn("font-semibold text-xs text-foreground", isDone && "line-through text-muted-foreground")}>
+            <p className={cn("omni-td-strong", isDone && "font-normal text-ink-3 line-through")}>
               {t.titulo}
             </p>
             {isAtrasada && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-red-500/40 bg-red-500/20 px-2 py-0.2 text-[10px] font-black text-red-400">
-                <span className="size-1.5 rounded-full bg-red-400 animate-ping" />
-                VENCIDA {diffDays !== null ? `(${Math.abs(diffDays)}d atrás)` : ""}
+              <span className="omni-badge omni-badge--danger shrink-0">
+                <AlertTriangle />
+                Vencida
+                {diffDays !== null ? ` há ${Math.abs(diffDays)} d` : ""}
               </span>
             )}
-            {isHoje && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/20 px-2 py-0.2 text-[10px] font-extrabold text-[#fba834]">
-                HOJE
-              </span>
-            )}
+            {isHoje && <span className="omni-badge omni-badge--warning shrink-0">Vence hoje</span>}
           </div>
-          {t.descricao && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 max-w-sm truncate">{t.descricao}</p>
-          )}
+          {t.descricao && <p className="omni-small max-w-sm truncate">{t.descricao}</p>}
         </td>
 
-        <td className="px-5 py-3.5">
+        <td>
           {t.lead_id ? (
             <Link
               to="/lead/$leadId"
               params={{ leadId: t.lead_id }}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+              className="omni-link inline-flex items-center gap-1"
             >
-              <ExternalLink className="size-3" /> {t.lead_nome || "Ver Lead"}
+              <ExternalLink className="size-3" /> {t.lead_nome || "Ver negócio"}
             </Link>
           ) : (
-            <span className="text-xs text-muted-foreground">Geral / Sem Lead</span>
+            <span className="omni-small">Tarefa interna</span>
           )}
         </td>
 
-        <td className="px-5 py-3.5">
-          <div className="flex items-center gap-2">
-            <span className={cn(
-              "text-xs font-semibold flex items-center gap-1",
-              isAtrasada ? "text-red-400 font-bold" : isHoje ? "text-[#fba834] font-bold" : "text-muted-foreground"
-            )}>
-              <CalendarDays className={cn("size-3.5", isAtrasada ? "text-red-400" : isHoje ? "text-[#fba834]" : "text-accent")} />
-              {formatDate(t.data_vencimento)}
-            </span>
-          </div>
-        </td>
-
-        <td className="px-5 py-3.5">
-          <span className={cn("inline-flex items-center gap-1 rounded-lg border px-2.5 py-0.5 text-[10px] font-bold", prio.cls)}>
-            {prio.label}
+        <td className="omni-td-num">
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarDays className="size-3.5 text-ink-faint" />
+            {formatDate(t.data_vencimento)}
           </span>
         </td>
 
-        <td className="px-5 py-3.5">
-          <span className={cn(
-            "inline-flex items-center gap-1 rounded-lg border px-2.5 py-0.5 text-[10px] font-bold",
-            isAtrasada ? "border-red-500/40 bg-red-500/15 text-red-400" : STATUS_MAP[t.status]?.cls || STATUS_MAP.pendente.cls
-          )}>
-            {isAtrasada ? "Em Atraso" : STATUS_MAP[t.status]?.label || "Pendente"}
+        <td>
+          <span className={cn("omni-badge", prio.badge)}>{prio.label}</span>
+        </td>
+
+        <td>
+          <span className={cn("omni-badge", isAtrasada ? "omni-badge--danger" : st.badge)}>
+            {isAtrasada ? "Em atraso" : st.label}
           </span>
         </td>
 
-        <td className="px-5 py-3.5 text-right">
-          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <td className="omni-td-actions">
+          <div className="inline-flex items-center gap-1">
             {isAtrasada && (
               <button
                 type="button"
-                onClick={() => rescheduleMutation.mutate({ tarefaId: t.tarefa_id, newDate: todayStr })}
-                className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/30 px-2 py-1 text-[10px] font-extrabold text-[#fba834] hover:bg-amber-500/25"
-                title="Mover vencimento para hoje"
+                onClick={() =>
+                  rescheduleMutation.mutate({ tarefaId: t.tarefa_id, newDate: todayStr })
+                }
+                className="omni-btn omni-btn--secondary omni-btn--sm"
+                title="Mover o vencimento para hoje"
               >
-                <RotateCcw className="size-3" /> Mover p/ Hoje
+                <RotateCcw /> Mover para hoje
               </button>
             )}
             <button
@@ -434,10 +535,11 @@ function TarefasPage() {
                   deleteMutation.mutate(t.tarefa_id);
                 }
               }}
-              className="p-1.5 text-red-400 hover:bg-red-500/15 rounded-lg transition-all"
-              title="Excluir tarefa"
+              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+              title={`Excluir ${t.titulo}`}
             >
-              <Trash2 className="size-4" />
+              <Trash2 />
+              <span className="omni-sr">Excluir {t.titulo}</span>
             </button>
           </div>
         </td>
@@ -445,598 +547,444 @@ function TarefasPage() {
     );
   };
 
+  const FILTROS = [
+    { id: "todas", label: "Todas", count: kpis.totalGeral },
+    { id: "atrasadas", label: "Em atraso", count: kpis.totalAtrasadas },
+    { id: "hoje", label: "Vencem hoje", count: kpis.totalHoje },
+    { id: "proximas", label: "Próximas", count: kpis.totalProximas },
+    { id: "concluidas", label: "Concluídas", count: kpis.totalConcluidas },
+  ] as const;
+
   return (
     <AppShell
-      title="Gestão de Tarefas"
+      title="Tarefas"
       subtitle={`${kpis.totalAtrasadas} em atraso · ${kpis.totalHoje} vencem hoje · ${kpis.totalConcluidas} concluídas`}
       actions={
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all"
+          className="omni-btn omni-btn--primary omni-btn--sm"
         >
-          <Plus className="size-4" /> Nova Tarefa
+          <Plus /> Nova tarefa
         </button>
       }
     >
-      <div className="w-full space-y-6">
+      <div className="omni-stack-6 w-full">
+        {/* ══════ 1. Indicadores (também servem de filtro) ══════ */}
 
-        {/* ══════ 1. KPIS DE TAREFAS COM DESTAQUE MÁXIMO PARA ATRASO ══════ */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          
-          {/* Card: Em Atraso */}
+        <section className="omni-grid omni-grid-4" aria-label="Situação das tarefas">
           <button
             type="button"
+            aria-pressed={filterBucket === "atrasadas"}
             onClick={() => setFilterBucket(filterBucket === "atrasadas" ? "todas" : "atrasadas")}
             className={cn(
-              "rounded-2xl border p-5 backdrop-blur-2xl shadow-xl space-y-2 text-left transition-all",
-              kpis.totalAtrasadas > 0
-                ? "border-red-500/40 bg-gradient-to-br from-card to-red-500/10 hover:border-red-500"
-                : "border-border bg-card/90 opacity-70",
-              filterBucket === "atrasadas" && "ring-2 ring-red-400"
+              "omni-card cursor-pointer text-left transition-colors duration-[var(--omni-dur-fast)]",
+              filterBucket === "atrasadas" ? "border-primary" : "hover:border-line-strong",
             )}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-red-400 flex items-center gap-1.5">
-                <AlertTriangle className="size-4" /> Em Atraso (Vencidas)
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <AlertTriangle className="size-3.5" /> Em atraso
               </span>
-              {kpis.totalAtrasadas > 0 && (
-                <span className="p-1.5 rounded-lg bg-red-500/20 text-red-400 animate-pulse">
-                  <AlertCircle className="size-4" />
-                </span>
-              )}
+              <p className={cn("omni-stat__value", kpis.totalAtrasadas > 0 && "text-danger")}>
+                {kpis.totalAtrasadas}
+              </p>
+              <p className="omni-stat__foot">
+                {kpis.totalAtrasadas > 0 ? (
+                  <span className="omni-badge omni-badge--danger">Exigem ação hoje</span>
+                ) : (
+                  <span className="omni-badge omni-badge--success">Nada vencido</span>
+                )}
+              </p>
             </div>
-            <p className="text-3xl font-black text-red-400">{kpis.totalAtrasadas}</p>
-            <p className="text-xs text-muted-foreground">Exigem ação imediata</p>
           </button>
 
-          {/* Card: Vencem Hoje */}
           <button
             type="button"
+            aria-pressed={filterBucket === "hoje"}
             onClick={() => setFilterBucket(filterBucket === "hoje" ? "todas" : "hoje")}
             className={cn(
-              "rounded-2xl border p-5 backdrop-blur-2xl shadow-xl space-y-2 text-left transition-all",
-              kpis.totalHoje > 0
-                ? "border-amber-500/40 bg-gradient-to-br from-card to-amber-500/10 hover:border-[#fba834]"
-                : "border-border bg-card/90 opacity-70",
-              filterBucket === "hoje" && "ring-2 ring-[#fba834]"
+              "omni-card cursor-pointer text-left transition-colors duration-[var(--omni-dur-fast)]",
+              filterBucket === "hoje" ? "border-primary" : "hover:border-line-strong",
             )}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-[#fba834] flex items-center gap-1.5">
-                <CalendarDays className="size-4" /> Vencem Hoje
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <CalendarDays className="size-3.5" /> Vencem hoje
               </span>
-              <span className="p-1.5 rounded-lg bg-amber-500/10 text-[#fba834]">
-                <Clock className="size-4" />
-              </span>
+              <p className="omni-stat__value">{kpis.totalHoje}</p>
+              <p className="omni-stat__foot">Programadas para a data de hoje</p>
             </div>
-            <p className="text-3xl font-black text-[#fba834]">{kpis.totalHoje}</p>
-            <p className="text-xs text-muted-foreground">Programadas para hoje</p>
           </button>
 
-          {/* Card: Próximas */}
           <button
             type="button"
+            aria-pressed={filterBucket === "proximas"}
             onClick={() => setFilterBucket(filterBucket === "proximas" ? "todas" : "proximas")}
             className={cn(
-              "rounded-2xl border border-blue-500/20 bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2 text-left transition-all hover:border-blue-400",
-              filterBucket === "proximas" && "ring-2 ring-blue-400"
+              "omni-card cursor-pointer text-left transition-colors duration-[var(--omni-dur-fast)]",
+              filterBucket === "proximas" ? "border-primary" : "hover:border-line-strong",
             )}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
-                <FastForward className="size-4" /> Próximas Atividades
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <FastForward className="size-3.5" /> Próximas
               </span>
-              <span className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400">
-                <Calendar className="size-4" />
-              </span>
+              <p className="omni-stat__value">{kpis.totalProximas}</p>
+              <p className="omni-stat__foot">Agendadas para os próximos dias</p>
             </div>
-            <p className="text-3xl font-black text-foreground">{kpis.totalProximas}</p>
-            <p className="text-xs text-muted-foreground">Dias futuros</p>
           </button>
 
-          {/* Card: Concluídas */}
           <button
             type="button"
+            aria-pressed={filterBucket === "concluidas"}
             onClick={() => setFilterBucket(filterBucket === "concluidas" ? "todas" : "concluidas")}
             className={cn(
-              "rounded-2xl border border-emerald-500/20 bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2 text-left transition-all hover:border-emerald-400",
-              filterBucket === "concluidas" && "ring-2 ring-emerald-400"
+              "omni-card cursor-pointer text-left transition-colors duration-[var(--omni-dur-fast)]",
+              filterBucket === "concluidas" ? "border-primary" : "hover:border-line-strong",
             )}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="size-4" /> Concluídas
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5" /> Concluídas
               </span>
-              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
-                <CheckSquare className="size-4" />
-              </span>
+              <p className="omni-stat__value">{kpis.totalConcluidas}</p>
+              <p className="omni-stat__foot">Finalizadas até agora</p>
             </div>
-            <p className="text-3xl font-black text-foreground">{kpis.totalConcluidas}</p>
-            <p className="text-xs text-muted-foreground">Finalizadas com sucesso</p>
           </button>
-        </div>
+        </section>
 
-        {/* ══════ 2. BARRA DE BUSCA, ABAS DE FILTRO RÁPIDO & CONTROLES ══════ */}
-        <div className="rounded-2xl border border-border bg-card/90 p-4 backdrop-blur-2xl shadow-xl flex flex-wrap items-center justify-between gap-3">
-          
-          {/* Pílulas de Filtro Rápido */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setFilterBucket("todas")}
-              className={cn(
-                "rounded-xl px-3 py-1.5 text-xs font-bold transition-all",
-                filterBucket === "todas"
-                  ? "bg-accent text-[#0d0d26] shadow-sm"
-                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
-              Todas ({kpis.totalGeral})
-            </button>
+        {/* ══════ 2. Filtros, busca e modo de exibição ══════ */}
 
-            {kpis.totalAtrasadas > 0 && (
+        <div className="omni-card">
+          <div className="omni-tabs px-3 pt-2" role="tablist" aria-label="Filtro rápido">
+            {FILTROS.map((f) => (
               <button
+                key={f.id}
                 type="button"
-                onClick={() => setFilterBucket("atrasadas")}
-                className={cn(
-                  "rounded-xl px-3 py-1.5 text-xs font-extrabold transition-all flex items-center gap-1",
-                  filterBucket === "atrasadas"
-                    ? "bg-red-500 text-white shadow-md shadow-red-500/20"
-                    : "bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
-                )}
+                role="tab"
+                aria-selected={filterBucket === f.id}
+                onClick={() => setFilterBucket(f.id as any)}
+                className="omni-tab"
               >
-                <AlertTriangle className="size-3.5" /> Em Atraso ({kpis.totalAtrasadas})
+                {f.label}
+                <span className="omni-badge omni-badge--outline">{f.count}</span>
               </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setFilterBucket("hoje")}
-              className={cn(
-                "rounded-xl px-3 py-1.5 text-xs font-bold transition-all",
-                filterBucket === "hoje"
-                  ? "bg-amber-500 text-[#0d0d26] shadow-md shadow-amber-500/20"
-                  : "bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25"
-              )}
-            >
-              Vencem Hoje ({kpis.totalHoje})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFilterBucket("proximas")}
-              className={cn(
-                "rounded-xl px-3 py-1.5 text-xs font-bold transition-all",
-                filterBucket === "proximas"
-                  ? "bg-blue-500 text-white"
-                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
-              Próximas ({kpis.totalProximas})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFilterBucket("concluidas")}
-              className={cn(
-                "rounded-xl px-3 py-1.5 text-xs font-bold transition-all",
-                filterBucket === "concluidas"
-                  ? "bg-emerald-500 text-white"
-                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
-              Concluídas ({kpis.totalConcluidas})
-            </button>
+            ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Campo de Busca */}
-            <div className="relative min-w-[200px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar tarefa ou lead..."
-                className="h-9 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60"
-              />
+          <div className="omni-card__body flex flex-wrap items-end gap-4 py-4">
+            <div className="omni-field min-w-[220px] flex-1">
+              <label className="omni-label" htmlFor="busca-tarefa">
+                Buscar tarefa
+              </label>
+              <div className="omni-input-group">
+                <Search />
+                <input
+                  id="busca-tarefa"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Título, descrição ou nome do negócio"
+                  className="omni-input"
+                />
+              </div>
             </div>
 
-            {/* Filtro de Prioridade */}
-            <select
-              value={prioFilter}
-              onChange={(e) => setPrioFilter(e.target.value)}
-              className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-semibold text-foreground outline-none focus:border-accent/60 cursor-pointer"
-            >
-              <option value="todas">Prioridade: Todas</option>
-              <option value="urgente">Urgente</option>
-              <option value="alta">Alta</option>
-              <option value="media">Média</option>
-              <option value="baixa">Baixa</option>
-            </select>
+            <div className="omni-field w-full sm:w-48">
+              <label className="omni-label" htmlFor="filtro-prioridade">
+                Prioridade
+              </label>
+              <select
+                id="filtro-prioridade"
+                value={prioFilter}
+                onChange={(e) => setPrioFilter(e.target.value)}
+                className="omni-select"
+              >
+                <option value="todas">Todas</option>
+                <option value="urgente">Urgente</option>
+                <option value="alta">Alta</option>
+                <option value="media">Média</option>
+                <option value="baixa">Baixa</option>
+              </select>
+            </div>
 
-            {/* Alternador Lista / Quadro */}
-            <div className="flex rounded-xl border border-border p-0.5 bg-background/50">
-              <button
-                type="button"
-                onClick={() => setView("lista")}
-                className={cn(
-                  "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all",
-                  view === "lista" ? "bg-accent text-[#0d0d26] shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <LayoutList className="size-3.5" /> Lista
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("quadro")}
-                className={cn(
-                  "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all",
-                  view === "quadro" ? "bg-accent text-[#0d0d26] shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Columns3 className="size-3.5" /> Quadro
-              </button>
+            <div className="omni-field">
+              <span className="omni-label">Exibição</span>
+              <div className="omni-btn-group" role="group" aria-label="Modo de exibição">
+                <button
+                  type="button"
+                  aria-pressed={view === "lista"}
+                  onClick={() => setView("lista")}
+                  className="omni-btn omni-btn--secondary"
+                >
+                  <LayoutList /> Lista
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={view === "quadro"}
+                  onClick={() => setView("quadro")}
+                  className="omni-btn omni-btn--secondary"
+                >
+                  <Columns3 /> Quadro
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ══════ 3. CONTEÚDO PRINCIPAL (LISTA INTELIGENTE OU QUADRO) ══════ */}
-        {isLoading ? (
-          <div className="py-16 text-center text-muted-foreground text-sm">Carregando tarefas...</div>
-        ) : sortedAndFilteredTasks.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-card/90 p-12 text-center space-y-3 backdrop-blur-2xl shadow-xl">
-            <CheckSquare className="size-10 mx-auto text-muted-foreground/30" />
-            <p className="text-sm font-semibold text-muted-foreground">Nenhuma tarefa encontrada para os filtros selecionados.</p>
-            <p className="text-xs text-muted-foreground/60">
-              Clique em "+ Nova Tarefa" para adicionar atividades da sua rotina comercial.
-            </p>
-          </div>
-        ) : view === "lista" ? (
-          <section className="overflow-hidden rounded-2xl border border-border bg-card/90 backdrop-blur-2xl shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-secondary/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+        {/* ══════ 3. Lista ou quadro ══════ */}
+
+        {view === "lista" ? (
+          <section className="omni-table-wrap">
+            <div className="omni-table-scroll">
+              <table className="omni-table">
+                <thead>
                   <tr>
-                    <th className="w-12 px-5 py-3.5" />
-                    <th className="px-5 py-3.5">Tarefa</th>
-                    <th className="px-5 py-3.5">Lead / Negócio</th>
-                    <th className="px-5 py-3.5">Vencimento</th>
-                    <th className="px-5 py-3.5">Prioridade</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5 text-right">Ações</th>
+                    <th className="w-12">
+                      <span className="omni-sr">Concluir</span>
+                    </th>
+                    <th>Tarefa</th>
+                    <th>Negócio</th>
+                    <th className="omni-th-num">Vencimento</th>
+                    <th>Prioridade</th>
+                    <th>Situação</th>
+                    <th className="omni-th-num">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/30">
-                  {sortedAndFilteredTasks.map((t) => renderTaskRow(t))}
+                <tbody>
+                  {isLoading ? (
+                    [0, 1, 2, 3, 4, 5].map((i) => (
+                      <tr key={i}>
+                        <td colSpan={7} className="p-0">
+                          <div className="omni-skeleton h-row w-full rounded-none" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : sortedAndFilteredTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-0">
+                        <div className="omni-empty">
+                          <span className="omni-empty__art">
+                            <CheckSquare />
+                          </span>
+                          <h4>Nenhuma tarefa nestes filtros</h4>
+                          <p>
+                            Volte para a aba "Todas" ou crie uma tarefa para começar a acompanhar a
+                            rotina comercial.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setModalOpen(true)}
+                            className="omni-btn omni-btn--secondary omni-btn--sm"
+                          >
+                            <Plus /> Nova tarefa
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedAndFilteredTasks.map((t) => renderTaskRow(t))
+                  )}
                 </tbody>
               </table>
             </div>
+
+            <div className="omni-table__foot">
+              <span>
+                {sortedAndFilteredTasks.length} de {kpis.totalGeral}{" "}
+                {kpis.totalGeral === 1 ? "tarefa" : "tarefas"}
+              </span>
+            </div>
           </section>
-        ) : (
-          /* ──── MODO QUADRO KANBAN POR TEMPO E STATUS ──── */
+        ) : isLoading ? (
           <div className="grid gap-4 md:grid-cols-4">
-            
-            {/* Coluna 1: Em Atraso */}
-            <div className="rounded-2xl border border-red-500/30 bg-card/90 p-4 backdrop-blur-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-red-500/30 pb-3">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-red-400 flex items-center gap-1.5">
-                  <AlertTriangle className="size-4" /> Em Atraso
-                </h3>
-                <span className="rounded-lg bg-red-500/20 px-2 py-0.5 text-[11px] font-black text-red-400 border border-red-500/30">
-                  {atrasadas.length}
-                </span>
-              </div>
-              <div className="space-y-2.5 min-h-[260px]">
-                {atrasadas.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/60 text-center pt-8">Nenhuma tarefa atrasada!</p>
-                ) : (
-                  atrasadas.map((t) => (
-                    <div
-                      key={t.tarefa_id}
-                      className="rounded-xl border border-red-500/40 bg-red-500/[0.07] p-3.5 space-y-2.5 hover:border-red-400 transition-all group"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleStatusMutation.mutate(t)}
-                          className="mt-0.5 text-red-400 hover:text-emerald-400 shrink-0"
-                        >
-                          <Square className="size-4" />
-                        </button>
-                        <p className="text-xs font-bold text-foreground flex-1 leading-snug">
-                          {t.titulo}
-                        </p>
-                      </div>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="omni-skeleton h-80 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-4">
+            <BoardColumn
+              title="Em atraso"
+              icon={<AlertTriangle className="size-3.5" />}
+              count={atrasadas.length}
+              empty="Nada vencido. Bom sinal."
+            >
+              {atrasadas.map((t) => (
+                <TaskCard key={t.tarefa_id} t={t} tone="atraso" />
+              ))}
+            </BoardColumn>
 
-                      {t.lead_id && (
-                        <Link
-                          to="/lead/$leadId"
-                          params={{ leadId: t.lead_id }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
-                        >
-                          <ExternalLink className="size-3" /> {t.lead_nome || "Ver Lead"}
-                        </Link>
-                      )}
+            <BoardColumn
+              title="Vencem hoje"
+              icon={<Clock className="size-3.5" />}
+              count={vencemHoje.length}
+              empty="Sem tarefas para hoje."
+            >
+              {vencemHoje.map((t) => (
+                <TaskCard key={t.tarefa_id} t={t} tone="hoje" />
+              ))}
+            </BoardColumn>
 
-                      <div className="flex items-center justify-between border-t border-red-500/20 pt-2 text-[11px]">
-                        <span className="text-red-400 font-bold flex items-center gap-1">
-                          <CalendarDays className="size-3" /> {formatDate(t.data_vencimento)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => rescheduleMutation.mutate({ tarefaId: t.tarefa_id, newDate: todayStr })}
-                          className="text-[10px] font-extrabold text-[#fba834] hover:underline"
-                        >
-                          p/ Hoje
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <BoardColumn
+              title="Próximas"
+              icon={<FastForward className="size-3.5" />}
+              count={proximas.length}
+              empty="Nada agendado à frente."
+            >
+              {proximas.map((t) => (
+                <TaskCard key={t.tarefa_id} t={t} tone="futuro" />
+              ))}
+            </BoardColumn>
 
-            {/* Coluna 2: Vencem Hoje */}
-            <div className="rounded-2xl border border-amber-500/30 bg-card/90 p-4 backdrop-blur-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-amber-500/30 pb-3">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#fba834] flex items-center gap-1.5">
-                  <Clock className="size-4" /> Vencem Hoje
-                </h3>
-                <span className="rounded-lg bg-amber-500/20 px-2 py-0.5 text-[11px] font-black text-[#fba834] border border-amber-500/30">
-                  {vencemHoje.length}
-                </span>
-              </div>
-              <div className="space-y-2.5 min-h-[260px]">
-                {vencemHoje.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/60 text-center pt-8">Sem tarefas para hoje.</p>
-                ) : (
-                  vencemHoje.map((t) => (
-                    <div
-                      key={t.tarefa_id}
-                      className="rounded-xl border border-amber-500/40 bg-amber-500/[0.06] p-3.5 space-y-2.5 hover:border-[#fba834] transition-all group"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleStatusMutation.mutate(t)}
-                          className="mt-0.5 text-muted-foreground hover:text-emerald-400 shrink-0"
-                        >
-                          <Square className="size-4" />
-                        </button>
-                        <p className="text-xs font-bold text-foreground flex-1 leading-snug">
-                          {t.titulo}
-                        </p>
-                      </div>
-
-                      {t.lead_id && (
-                        <Link
-                          to="/lead/$leadId"
-                          params={{ leadId: t.lead_id }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
-                        >
-                          <ExternalLink className="size-3" /> {t.lead_nome || "Ver Lead"}
-                        </Link>
-                      )}
-
-                      <div className="flex items-center justify-between border-t border-amber-500/20 pt-2 text-[11px]">
-                        <span className="text-[#fba834] font-bold">Hoje</span>
-                        <span className={cn("rounded border px-1.5 py-0.2 text-[9px] font-bold", PRIORIDADES[t.prioridade]?.cls)}>
-                          {PRIORIDADES[t.prioridade]?.label}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Coluna 3: Próximas Atividades */}
-            <div className="rounded-2xl border border-blue-500/20 bg-card/90 p-4 backdrop-blur-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
-                  <FastForward className="size-4" /> Próximas
-                </h3>
-                <span className="rounded-lg bg-secondary px-2 py-0.5 text-[11px] font-bold text-muted-foreground border border-border">
-                  {proximas.length}
-                </span>
-              </div>
-              <div className="space-y-2.5 min-h-[260px]">
-                {proximas.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/60 text-center pt-8">Sem próximas tarefas.</p>
-                ) : (
-                  proximas.map((t) => (
-                    <div
-                      key={t.tarefa_id}
-                      className="rounded-xl border border-border/80 bg-secondary/30 p-3.5 space-y-2.5 hover:border-accent/40 transition-all group"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleStatusMutation.mutate(t)}
-                          className="mt-0.5 text-muted-foreground hover:text-emerald-400 shrink-0"
-                        >
-                          <Square className="size-4" />
-                        </button>
-                        <p className="text-xs font-semibold text-foreground flex-1 leading-snug">
-                          {t.titulo}
-                        </p>
-                      </div>
-
-                      {t.lead_id && (
-                        <Link
-                          to="/lead/$leadId"
-                          params={{ leadId: t.lead_id }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
-                        >
-                          <ExternalLink className="size-3" /> {t.lead_nome || "Ver Lead"}
-                        </Link>
-                      )}
-
-                      <div className="flex items-center justify-between border-t border-border/40 pt-2 text-[11px]">
-                        <span className="text-muted-foreground">{formatDate(t.data_vencimento)}</span>
-                        <span className={cn("rounded border px-1.5 py-0.2 text-[9px] font-bold", PRIORIDADES[t.prioridade]?.cls)}>
-                          {PRIORIDADES[t.prioridade]?.label}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Coluna 4: Concluídas */}
-            <div className="rounded-2xl border border-emerald-500/20 bg-card/90 p-4 backdrop-blur-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="size-4" /> Concluídas
-                </h3>
-                <span className="rounded-lg bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-400 border border-emerald-500/20">
-                  {concluidas.length}
-                </span>
-              </div>
-              <div className="space-y-2.5 min-h-[260px]">
-                {concluidas.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/60 text-center pt-8">Nenhuma tarefa concluída ainda.</p>
-                ) : (
-                  concluidas.map((t) => (
-                    <div
-                      key={t.tarefa_id}
-                      className="rounded-xl border border-border/60 bg-secondary/20 p-3.5 space-y-2 opacity-60 hover:opacity-100 transition-all group"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleStatusMutation.mutate(t)}
-                          className="mt-0.5 text-emerald-400 shrink-0"
-                          title="Reabrir tarefa"
-                        >
-                          <CheckCircle2 className="size-4" />
-                        </button>
-                        <p className="text-xs font-medium line-through text-muted-foreground flex-1 leading-snug">
-                          {t.titulo}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/40 pt-2">
-                        <span>{formatDate(t.data_vencimento)}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`Excluir "${t.titulo}"?`)) {
-                              deleteMutation.mutate(t.tarefa_id);
-                            }
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-red-400 hover:underline"
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
+            <BoardColumn
+              title="Concluídas"
+              icon={<CheckCircle2 className="size-3.5" />}
+              count={concluidas.length}
+              empty="Nenhuma tarefa concluída ainda."
+            >
+              {concluidas.map((t) => (
+                <TaskCard key={t.tarefa_id} t={t} tone="feito" />
+              ))}
+            </BoardColumn>
           </div>
         )}
       </div>
 
       {/* Modal de Criação de Tarefa */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#12122d]/95 backdrop-blur-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-tarefa"
+        >
+          <div className="omni-modal w-full max-w-[560px]">
+            <div className="omni-modal__header">
               <div>
-                <h2 className="text-base font-extrabold text-foreground">Nova Tarefa</h2>
-                <p className="text-xs text-muted-foreground">Agende atividades, follow-ups ou tarefas gerais</p>
+                <h2 id="titulo-modal-tarefa" className="omni-h4">
+                  Nova tarefa
+                </h2>
+                <p className="omni-small mt-1">Follow-ups, atividades e combinados da equipe</p>
               </div>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10"
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
               >
-                <X className="size-4" />
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Título da Tarefa *</label>
-                <input
-                  value={titulo}
-                  onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ex: Ligar para confirmar proposta, Enviar contrato assinado..."
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Vincular a um Lead (Opcional)</label>
-                <select
-                  value={leadId}
-                  onChange={(e) => setLeadId(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-white outline-none focus:border-accent/60 cursor-pointer"
-                >
-                  <option value="">Nenhum (Tarefa interna / Geral)</option>
-                  {leads.map((l: any) => (
-                    <option key={l.lead_id} value={l.lead_id}>
-                      {l.lead_nome || l.lead_telefone || l.lead_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Data de Vencimento</label>
+            <form onSubmit={handleCreateTask}>
+              <div className="omni-modal__body omni-stack">
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="tarefa-titulo">
+                    Título da tarefa <span className="omni-req">*</span>
+                  </label>
                   <input
-                    type="date"
-                    value={dataVencimento}
-                    onChange={(e) => setDataVencimento(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60 cursor-pointer"
+                    id="tarefa-titulo"
+                    value={titulo}
+                    onChange={(e) => {
+                      setTitulo(e.target.value);
+                      if (e.target.value.trim()) setTituloInvalido(false);
+                    }}
+                    aria-invalid={tituloInvalido || undefined}
+                    placeholder="Ex.: Ligar para confirmar a proposta"
+                    className="omni-input"
+                    autoFocus
+                  />
+                  {tituloInvalido && (
+                    <p className="omni-error">
+                      Descreva a tarefa em uma frase para poder salvá-la.
+                    </p>
+                  )}
+                </div>
+
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="tarefa-lead">
+                    Negócio vinculado
+                  </label>
+                  <select
+                    id="tarefa-lead"
+                    value={leadId}
+                    onChange={(e) => setLeadId(e.target.value)}
+                    className="omni-select"
+                  >
+                    <option value="">Nenhum — tarefa interna</option>
+                    {leads.map((l: any) => (
+                      <option key={l.lead_id} value={l.lead_id}>
+                        {l.lead_nome || l.lead_telefone || l.lead_id}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="omni-hint">
+                    Vincular um negócio faz a tarefa aparecer também na página dele.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="omni-field">
+                    <label className="omni-label" htmlFor="tarefa-data">
+                      Data de vencimento
+                    </label>
+                    <input
+                      id="tarefa-data"
+                      type="date"
+                      value={dataVencimento}
+                      onChange={(e) => setDataVencimento(e.target.value)}
+                      className="omni-input num"
+                    />
+                  </div>
+                  <div className="omni-field">
+                    <label className="omni-label" htmlFor="tarefa-prioridade">
+                      Prioridade
+                    </label>
+                    <select
+                      id="tarefa-prioridade"
+                      value={prioridade}
+                      onChange={(e) => setPrioridade(e.target.value as any)}
+                      className="omni-select"
+                    >
+                      <option value="baixa">Baixa</option>
+                      <option value="media">Média</option>
+                      <option value="alta">Alta</option>
+                      <option value="urgente">Urgente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="tarefa-descricao">
+                    Descrição
+                  </label>
+                  <textarea
+                    id="tarefa-descricao"
+                    value={descricao}
+                    onChange={(e) => setDescricao(e.target.value)}
+                    rows={3}
+                    placeholder="Detalhes que a equipe precisa saber para executar"
+                    className="omni-textarea"
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Prioridade</label>
-                  <select
-                    value={prioridade}
-                    onChange={(e) => setPrioridade(e.target.value as any)}
-                    className="w-full rounded-xl border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-white outline-none focus:border-accent/60 cursor-pointer"
-                  >
-                    <option value="baixa">Baixa</option>
-                    <option value="media">Média</option>
-                    <option value="alta">Alta</option>
-                    <option value="urgente">Urgente</option>
-                  </select>
-                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Descrição / Observações</label>
-                <textarea
-                  value={descricao}
-                  onChange={(e) => setDescricao(e.target.value)}
-                  rows={3}
-                  placeholder="Instruções ou detalhes adicionais para a equipe..."
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60 resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 border-t border-white/10 pt-4">
+              <div className="omni-modal__footer">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-muted-foreground hover:bg-white/10"
+                  className="omni-btn omni-btn--ghost"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !titulo.trim()}
-                  className="rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-5 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all disabled:opacity-50"
+                  disabled={saving}
+                  data-loading={saving ? "true" : undefined}
+                  className="omni-btn omni-btn--primary"
                 >
-                  {saving ? "Salvando..." : "Criar Tarefa"}
+                  Criar tarefa
                 </button>
               </div>
             </form>

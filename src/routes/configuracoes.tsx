@@ -11,7 +11,6 @@ import {
   Plus,
   Trash2,
   Save,
-  Loader2,
   KeyRound,
   Bot,
   ShieldCheck,
@@ -40,9 +39,9 @@ export const Route = createFileRoute("/configuracoes")({
 });
 
 const TABS = [
-  { id: "perfil", label: "Meu Perfil & IA", Icon: User },
-  { id: "usuarios", label: "Equipe & Usuários", Icon: Users },
-  { id: "perdas", label: "Motivos de Perda", Icon: XCircle },
+  { id: "perfil", label: "Perfil e IA", Icon: User },
+  { id: "usuarios", label: "Equipe", Icon: Users },
+  { id: "perdas", label: "Motivos de perda", Icon: XCircle },
 ] as const;
 
 function Configuracoes() {
@@ -159,10 +158,11 @@ function Configuracoes() {
   const updateProfileMutation = useMutation({
     mutationFn: async (mode: "profile" | "prompt") => {
       if (!currentDbUser?.user_id) throw new Error("Usuário não encontrado no banco de dados.");
-      
-      const payload = mode === "profile" 
-        ? { user_nome: nome, user_telefone: telefone, token_uazapi: tokenUazapi }
-        : { user_prompt: userPrompt };
+
+      const payload =
+        mode === "profile"
+          ? { user_nome: nome, user_telefone: telefone, token_uazapi: tokenUazapi }
+          : { user_prompt: userPrompt };
 
       const { error } = await supabase
         .from("usuarios")
@@ -171,7 +171,11 @@ function Configuracoes() {
       if (error) throw error;
     },
     onSuccess: (_, mode) => {
-      toast.success(mode === "profile" ? "Perfil atualizado com sucesso!" : "Prompt da IA atualizado com sucesso!");
+      toast.success(
+        mode === "profile"
+          ? "Perfil atualizado com sucesso!"
+          : "Prompt da IA atualizado com sucesso!",
+      );
       queryClient.invalidateQueries({ queryKey: ["current_db_user"] });
       queryClient.invalidateQueries({ queryKey: ["usuarios"] });
     },
@@ -335,484 +339,589 @@ function Configuracoes() {
   };
 
   const getInitials = (n: string) =>
-    n ? n.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2) : "OM";
+    n
+      ? n
+          .split(" ")
+          .map((p) => p[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2)
+      : "OM";
 
   return (
-    <AppShell title="Configurações" subtitle="Gerenciamento da conta, equipe, robô de IA e parâmetros comerciais">
-      <div className="w-full space-y-6">
-        
-        {/* Navegação por Abas */}
-        <div className="flex gap-2 border-b border-border pb-1 overflow-x-auto scrollbar-none">
+    <AppShell
+      title="Configurações"
+      subtitle="Conta, equipe, agente de IA e parâmetros do funil comercial"
+    >
+      <div className="omni-stack-6 w-full">
+        <div className="omni-tabs" role="tablist" aria-label="Seções de configuração">
           {TABS.map((t) => (
             <button
               key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
-              className={cn(
-                "flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-bold transition-all duration-200 whitespace-nowrap",
-                tab === t.id
-                  ? "bg-gradient-to-r from-[#fba834] to-[#f7931e] text-[#0d0d26] shadow-md shadow-[#fba834]/20"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-              )}
+              className="omni-tab"
             >
               <t.Icon className="size-4" /> {t.label}
             </button>
           ))}
         </div>
 
-        {/* ══════ ABA 1: MEU PERFIL & IA ══════ */}
+        {/* ══════ Aba 1: perfil e IA ══════ */}
         {tab === "perfil" && (
-          <div className="space-y-6">
+          <div className="omni-stack-6">
             <div className="grid gap-6 lg:grid-cols-12">
-              
-              {/* Card Resumo do Perfil */}
-              <div className="lg:col-span-4 rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl flex flex-col items-center text-center justify-between">
-                <div className="space-y-4 w-full flex flex-col items-center">
-                  <div className="relative">
-                    <span className="grid size-24 place-items-center rounded-3xl bg-gradient-to-br from-[#fba834] to-[#f7931e] text-3xl font-extrabold text-[#0d0d26] shadow-xl border-2 border-white/20">
-                      {getInitials(nome || user?.email || "")}
-                    </span>
-                    <span className="absolute -bottom-1 -right-1 size-5 rounded-full border-2 border-card bg-emerald-500" />
-                  </div>
+              {/* Resumo do perfil */}
+              <section className="omni-card flex flex-col lg:col-span-4">
+                <div className="omni-card__body flex flex-1 flex-col items-center gap-4 text-center">
+                  <span className="omni-avatar size-20 text-2xl" aria-hidden="true">
+                    {getInitials(nome || user?.email || "")}
+                  </span>
                   <div>
-                    <h3 className="text-xl font-extrabold text-foreground tracking-tight">
-                      {nome || "Administrador Omni"}
-                    </h3>
-                    <p className="text-xs text-muted-foreground font-medium mt-0.5">{user?.email}</p>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/15 text-accent text-xs font-semibold mt-3">
-                      <ShieldCheck className="size-3.5" />
-                      {currentDbUser?.user_cargo === "admin" ? "Administrador Principal" : "Usuário da Plataforma"}
+                    <h2 className="omni-h3">{nome || "Administrador Omni"}</h2>
+                    <p className="omni-small mt-0.5">{user?.email}</p>
+                    <span className="omni-badge omni-badge--brand mt-3">
+                      <ShieldCheck />
+                      {currentDbUser?.user_cargo === "admin"
+                        ? "Administrador principal"
+                        : "Usuário da plataforma"}
                     </span>
                   </div>
                 </div>
 
-                <div className="w-full pt-6 mt-6 border-t border-border space-y-2">
+                <div className="omni-card__footer justify-center">
                   <button
+                    type="button"
                     onClick={() => setIsPasswordModalOpen(true)}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-secondary/80 py-2.5 text-xs font-bold text-foreground transition-all hover:bg-secondary hover:border-accent/40"
+                    className="omni-btn omni-btn--secondary omni-btn--block"
                   >
-                    <KeyRound className="size-4 text-accent" />
-                    Alterar Senha de Acesso
+                    <KeyRound /> Alterar senha de acesso
                   </button>
                 </div>
-              </div>
+              </section>
 
-              {/* Formulário de Dados e Integrações */}
-              <div className="lg:col-span-8 rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-5">
-                <div className="flex items-center justify-between border-b border-border pb-4 h-14">
+              {/* Dados e integrações */}
+              <section className="omni-card lg:col-span-8">
+                <div className="omni-card__header">
                   <div>
-                    <h3 className="text-lg font-extrabold text-foreground tracking-tight">
-                      Informações Pessoais & Integrações
-                    </h3>
-                    <p className="text-xs text-muted-foreground font-medium">
-                      Atualize seus dados de contato e chave Uazapi
+                    <h2 className="omni-h4">Dados pessoais e integrações</h2>
+                    <p className="omni-small mt-0.5">
+                      Contato do responsável e chave de conexão do WhatsApp
                     </p>
                   </div>
 
-                  {/* O Botão só aparece se houver alteração pendente (isProfileDirty) */}
                   {isProfileDirty ? (
                     <button
+                      type="button"
                       onClick={() => updateProfileMutation.mutate("profile")}
                       disabled={updateProfileMutation.isPending}
-                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2.5 text-xs font-bold text-[#0d0d26] transition-all hover:brightness-110 shadow-md shadow-[#fba834]/20 animate-in fade-in-0 zoom-in-95 duration-150"
+                      data-loading={updateProfileMutation.isPending ? "true" : undefined}
+                      className="omni-btn omni-btn--primary omni-btn--sm"
                     >
-                      {updateProfileMutation.isPending ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Save className="size-4" />
-                      )}
-                      Salvar Alterações
+                      <Save /> Salvar alterações
                     </button>
                   ) : (
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
-                      <Check className="size-3.5" />
-                      Sincronizado
+                    <span className="omni-badge omni-badge--success">
+                      <Check /> Tudo salvo
                     </span>
                   )}
                 </div>
 
-                {loadingProfile ? (
-                  <div className="py-12 text-center text-muted-foreground">
-                    <Loader2 className="size-6 animate-spin mx-auto mb-2 text-accent" />
-                    Carregando dados do perfil...
-                  </div>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <User className="size-3.5 text-accent" />
-                        Nome Completo
-                      </label>
-                      <input
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        className="h-11 w-full rounded-xl border border-input bg-background px-3.5 text-sm text-foreground outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                        placeholder="Seu nome completo"
-                      />
+                <div className="omni-card__body">
+                  {loadingProfile ? (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="omni-skeleton h-control w-full" />
+                      ))}
                     </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="omni-field">
+                        <label className="omni-label" htmlFor="perfil-nome">
+                          Nome completo
+                        </label>
+                        <div className="omni-input-group">
+                          <User />
+                          <input
+                            id="perfil-nome"
+                            value={nome}
+                            onChange={(e) => setNome(e.target.value)}
+                            className="omni-input"
+                            placeholder="Seu nome completo"
+                          />
+                        </div>
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <Mail className="size-3.5 text-accent" />
-                        E-mail de Cadastro
-                      </label>
-                      <input
-                        value={user?.email || ""}
-                        disabled
-                        className="h-11 w-full rounded-xl border border-input bg-muted/50 px-3.5 text-sm text-muted-foreground outline-none cursor-not-allowed"
-                      />
-                    </div>
+                      <div className="omni-field">
+                        <label className="omni-label" htmlFor="perfil-email">
+                          E-mail de cadastro
+                        </label>
+                        <div className="omni-input-group">
+                          <Mail />
+                          <input
+                            id="perfil-email"
+                            value={user?.email || ""}
+                            disabled
+                            className="omni-input"
+                          />
+                        </div>
+                        <p className="omni-hint">
+                          O e-mail de login não muda por aqui. Fale com o administrador.
+                        </p>
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <Phone className="size-3.5 text-accent" />
-                        Telefone / WhatsApp
-                      </label>
-                      <input
-                        value={telefone}
-                        onChange={(e) => setTelefone(e.target.value)}
-                        className="h-11 w-full rounded-xl border border-input bg-background px-3.5 text-sm text-foreground outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                        placeholder="5511999999999"
-                      />
-                    </div>
+                      <div className="omni-field">
+                        <label className="omni-label" htmlFor="perfil-telefone">
+                          Telefone / WhatsApp
+                        </label>
+                        <div className="omni-input-group">
+                          <Phone />
+                          <input
+                            id="perfil-telefone"
+                            value={telefone}
+                            onChange={(e) => setTelefone(e.target.value)}
+                            className="omni-input num"
+                            placeholder="5511999999999"
+                          />
+                        </div>
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <KeyRound className="size-3.5 text-accent" />
-                        Token Uazapi (WhatsApp API)
-                      </label>
-                      <input
-                        value={tokenUazapi}
-                        onChange={(e) => setTokenUazapi(e.target.value)}
-                        className="h-11 w-full rounded-xl border border-input bg-background px-3.5 text-sm text-foreground font-mono outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                        placeholder="Token de conexão Uazapi"
-                      />
+                      <div className="omni-field">
+                        <label className="omni-label" htmlFor="perfil-token">
+                          Token Uazapi
+                        </label>
+                        <div className="omni-input-group">
+                          <KeyRound />
+                          <input
+                            id="perfil-token"
+                            value={tokenUazapi}
+                            onChange={(e) => setTokenUazapi(e.target.value)}
+                            className="omni-input font-mono"
+                            placeholder="Token de conexão do WhatsApp"
+                          />
+                        </div>
+                        <p className="omni-hint">
+                          É essa chave que conecta o painel à sua conta de WhatsApp.
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </section>
             </div>
 
-            {/* Painel do Prompt do Agente de IA */}
-            <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4 h-14">
+            {/* Prompt do agente de IA */}
+            <section className="omni-card">
+              <div className="omni-card__header">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-2xl bg-accent/15 text-accent border border-accent/20">
-                    <Bot className="size-6" />
-                  </div>
+                  <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary-soft text-primary-soft-fg">
+                    <Bot className="size-5" />
+                  </span>
                   <div>
-                    <h3 className="text-lg font-extrabold text-foreground tracking-tight">
-                      Instruções do Agente de IA (System Prompt)
-                    </h3>
-                    <p className="text-xs text-muted-foreground font-medium">
-                      Configure o comportamento, persona e regras que a IA utilizará para atender os leads automaticamente.
+                    <h2 className="omni-h4">Instruções do agente de IA</h2>
+                    <p className="omni-small mt-0.5">
+                      Comportamento, tom de voz e regras que a IA segue ao atender os leads.
                     </p>
                   </div>
                 </div>
 
-                {/* O Botão só aparece se o prompt for alterado (isPromptDirty) */}
                 {isPromptDirty ? (
                   <button
+                    type="button"
                     onClick={() => updateProfileMutation.mutate("prompt")}
                     disabled={updateProfileMutation.isPending}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2.5 text-xs font-bold text-[#0d0d26] transition-all hover:brightness-110 shadow-md shadow-[#fba834]/20 animate-in fade-in-0 zoom-in-95 duration-150"
+                    data-loading={updateProfileMutation.isPending ? "true" : undefined}
+                    className="omni-btn omni-btn--primary omni-btn--sm"
                   >
-                    {updateProfileMutation.isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Save className="size-4" />
-                    )}
-                    Salvar Prompt da IA
+                    <Save /> Salvar instruções
                   </button>
                 ) : (
-                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
-                    <Check className="size-3.5" />
-                    Prompt Atualizado
+                  <span className="omni-badge omni-badge--success">
+                    <Check /> Tudo salvo
                   </span>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <textarea
-                  rows={10}
-                  value={userPrompt}
-                  onChange={(e) => setUserPrompt(e.target.value)}
-                  placeholder="Escreva aqui o System Prompt completo do seu agente de IA..."
-                  className="w-full rounded-xl border border-input bg-background p-4 text-xs font-mono text-foreground leading-relaxed outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 scrollbar-slim"
-                />
+              <div className="omni-card__body">
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="perfil-prompt">
+                    Instruções (system prompt)
+                  </label>
+                  <textarea
+                    id="perfil-prompt"
+                    rows={12}
+                    value={userPrompt}
+                    onChange={(e) => setUserPrompt(e.target.value)}
+                    placeholder="Descreva como a IA deve se apresentar, o que pode prometer e quando passar o atendimento para uma pessoa."
+                    className="omni-textarea font-mono text-sm scrollbar-slim"
+                  />
+                  <p className="omni-hint">
+                    Mudanças só valem para as próximas conversas — as em andamento seguem com as
+                    instruções antigas.
+                  </p>
+                </div>
               </div>
-            </div>
+            </section>
           </div>
         )}
 
-        {/* ══════ ABA 2: EQUIPE & USUÁRIOS ══════ */}
+        {/* ══════ Aba 2: equipe ══════ */}
         {tab === "usuarios" && (
-          <section className="overflow-hidden rounded-2xl border border-border bg-card/90 backdrop-blur-2xl shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5">
+          <section className="omni-table-wrap">
+            <div className="omni-card__header">
               <div>
-                <h3 className="text-lg font-extrabold text-foreground tracking-tight">
-                  Equipe & Usuários Cadastrados
-                </h3>
-                <p className="text-xs text-muted-foreground font-medium">
-                  Gerencie os membros da equipe que possuem acesso ao painel.
+                <h2 className="omni-h4">Equipe com acesso ao painel</h2>
+                <p className="omni-small mt-0.5">
+                  Quem pode entrar no Omni e com qual nível de permissão
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => openUserModal()}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2.5 text-xs font-bold text-[#0d0d26] transition-all hover:brightness-110 shadow-md shadow-[#fba834]/20"
+                className="omni-btn omni-btn--primary omni-btn--sm"
               >
-                <Plus className="size-4" /> Adicionar Usuário
+                <Plus /> Adicionar usuário
               </button>
             </div>
 
-            {loadingUsuarios ? (
-              <div className="py-12 text-center text-muted-foreground">
-                <Loader2 className="size-6 animate-spin mx-auto mb-2 text-accent" />
-                Carregando usuários...
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-secondary/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
-                    <tr>
-                      <th className="px-6 py-3.5">Usuário</th>
-                      <th className="px-6 py-3.5">E-mail</th>
-                      <th className="px-6 py-3.5">Telefone</th>
-                      <th className="px-6 py-3.5">Cargo</th>
-                      <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-medium">
-                    {usuariosList.map((u: any) => (
-                      <tr key={u.user_id} className="hover:bg-secondary/40 transition-colors">
-                        <td className="px-6 py-4 flex items-center gap-3 font-bold text-foreground">
-                          <span
-                            className="grid size-9 place-items-center rounded-xl text-xs font-bold text-white shadow-sm"
-                            style={{ backgroundColor: "#fba834" }}
-                          >
-                            {getInitials(u.user_nome)}
-                          </span>
-                          <span>{u.user_nome || "Sem Nome"}</span>
+            <div className="omni-table-scroll">
+              <table className="omni-table">
+                <thead>
+                  <tr>
+                    <th>Usuário</th>
+                    <th>E-mail</th>
+                    <th>Telefone</th>
+                    <th>Cargo</th>
+                    <th>Situação</th>
+                    <th className="omni-th-num">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingUsuarios ? (
+                    [0, 1, 2, 3].map((i) => (
+                      <tr key={i}>
+                        <td colSpan={6} className="p-0">
+                          <div className="omni-skeleton h-row w-full rounded-none" />
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground">{u.user_email}</td>
-                        <td className="px-6 py-4 text-muted-foreground">{u.user_telefone || "-"}</td>
-                        <td className="px-6 py-4">
-                          <span className="rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-bold text-accent">
+                      </tr>
+                    ))
+                  ) : usuariosList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-0">
+                        <div className="omni-empty">
+                          <span className="omni-empty__art">
+                            <Users />
+                          </span>
+                          <h4>Nenhum usuário cadastrado</h4>
+                          <p>
+                            Adicione as pessoas da equipe que precisam entrar no painel para
+                            trabalhar.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openUserModal()}
+                            className="omni-btn omni-btn--secondary omni-btn--sm"
+                          >
+                            <Plus /> Adicionar usuário
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    usuariosList.map((u: any) => (
+                      <tr key={u.user_id}>
+                        <td>
+                          <div className="omni-user">
+                            <span className="omni-avatar" aria-hidden="true">
+                              {getInitials(u.user_nome)}
+                            </span>
+                            <span className="omni-user__name truncate">
+                              {u.user_nome || "Sem nome"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="text-ink-2">{u.user_email}</td>
+                        <td className="num text-ink-2">{u.user_telefone || "—"}</td>
+                        <td>
+                          <span
+                            className={cn(
+                              "omni-badge",
+                              u.user_cargo === "admin"
+                                ? "omni-badge--brand"
+                                : "omni-badge--outline",
+                            )}
+                          >
                             {u.user_cargo === "admin" ? "Administrador" : "Usuário"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td>
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                              "omni-badge",
                               u.user_status === "Ativado"
-                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                : "bg-red-500/15 text-red-500",
+                                ? "omni-badge--success"
+                                : "omni-badge--danger",
                             )}
                           >
-                            <span className={cn("size-1.5 rounded-full", u.user_status === "Ativado" ? "bg-emerald-500" : "bg-red-500")} />
                             {u.user_status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-1.5">
+                        <td className="omni-td-actions">
+                          <div className="inline-flex items-center gap-1">
                             <button
+                              type="button"
                               onClick={() => openUserModal(u)}
-                              className="p-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-                              title="Editar"
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                              title={`Editar ${u.user_nome || "usuário"}`}
                             >
-                              <Pencil className="size-4" />
+                              <Pencil />
+                              <span className="omni-sr">Editar {u.user_nome || "usuário"}</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 if (confirm(`Deseja realmente remover o usuário ${u.user_nome}?`)) {
                                   deleteUserMutation.mutate(u.user_id);
                                 }
                               }}
-                              className="p-2 rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                              title="Excluir"
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+                              title={`Excluir ${u.user_nome || "usuário"}`}
                             >
-                              <Trash2 className="size-4" />
+                              <Trash2 />
+                              <span className="omni-sr">Excluir {u.user_nome || "usuário"}</span>
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
-                    {usuariosList.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
-                          Nenhum usuário cadastrado.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="omni-table__foot">
+              <span>
+                {usuariosList.length} {usuariosList.length === 1 ? "usuário" : "usuários"} com
+                acesso
+              </span>
+            </div>
           </section>
         )}
 
-        {/* ══════ ABA 3: MOTIVOS DE PERDA ══════ */}
+        {/* ══════ Aba 3: motivos de perda ══════ */}
         {tab === "perdas" && (
-          <section className="overflow-hidden rounded-2xl border border-border bg-card/90 backdrop-blur-2xl shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5">
+          <section className="omni-table-wrap">
+            <div className="omni-card__header">
               <div>
-                <h3 className="text-lg font-extrabold text-foreground tracking-tight">
-                  Motivos de Perda no Funil Comercial
-                </h3>
-                <p className="text-xs text-muted-foreground font-medium">
-                  Motivos selecionáveis no CRM ao desqualificar um negócio.
+                <h2 className="omni-h4">Motivos de perda</h2>
+                <p className="omni-small mt-0.5">
+                  Opções que aparecem ao marcar um negócio como perdido no funil
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => openMotivoModal()}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2.5 text-xs font-bold text-[#0d0d26] transition-all hover:brightness-110 shadow-md shadow-[#fba834]/20"
+                className="omni-btn omni-btn--primary omni-btn--sm"
               >
-                <Plus className="size-4" /> Novo Motivo
+                <Plus /> Novo motivo
               </button>
             </div>
 
-            {loadingMotivos ? (
-              <div className="py-12 text-center text-muted-foreground">
-                <Loader2 className="size-6 animate-spin mx-auto mb-2 text-accent" />
-                Carregando motivos...
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-secondary/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+            <div className="omni-table-scroll">
+              <table className="omni-table">
+                <thead>
+                  <tr>
+                    <th>Motivo</th>
+                    <th>Situação</th>
+                    <th className="omni-th-num">Criado em</th>
+                    <th className="omni-th-num">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingMotivos ? (
+                    [0, 1, 2, 3].map((i) => (
+                      <tr key={i}>
+                        <td colSpan={4} className="p-0">
+                          <div className="omni-skeleton h-row w-full rounded-none" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : motivosList.length === 0 ? (
                     <tr>
-                      <th className="px-6 py-3.5">Nome do Motivo</th>
-                      <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5">Data de Criação</th>
-                      <th className="px-6 py-3.5 text-right">Ações</th>
+                      <td colSpan={4} className="p-0">
+                        <div className="omni-empty">
+                          <span className="omni-empty__art">
+                            <XCircle />
+                          </span>
+                          <h4>Nenhum motivo cadastrado</h4>
+                          <p>
+                            Cadastre os motivos mais comuns para o relatório de gargalos apontar
+                            onde as vendas estão parando.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openMotivoModal()}
+                            className="omni-btn omni-btn--secondary omni-btn--sm"
+                          >
+                            <Plus /> Novo motivo
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-medium">
-                    {motivosList.map((m: any) => (
-                      <tr key={m.motivo_id} className="hover:bg-secondary/40 transition-colors">
-                        <td className="px-6 py-4 font-bold text-foreground">{m.motivo_nome}</td>
-                        <td className="px-6 py-4">
+                  ) : (
+                    motivosList.map((m: any) => (
+                      <tr key={m.motivo_id}>
+                        <td className="omni-td-strong">{m.motivo_nome}</td>
+                        <td>
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-                              m.motivo_ativo
-                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                : "bg-muted text-muted-foreground",
+                              "omni-badge",
+                              m.motivo_ativo ? "omni-badge--success" : "omni-badge--outline",
                             )}
                           >
-                            <span className={cn("size-1.5 rounded-full", m.motivo_ativo ? "bg-emerald-500" : "bg-muted-foreground")} />
                             {m.motivo_ativo ? "Ativo" : "Inativo"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground">
-                          {m.criado_em ? new Date(m.criado_em).toLocaleDateString("pt-BR") : "-"}
+                        <td className="omni-td-num">
+                          {m.criado_em ? new Date(m.criado_em).toLocaleDateString("pt-BR") : "—"}
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-1.5">
+                        <td className="omni-td-actions">
+                          <div className="inline-flex items-center gap-1">
                             <button
+                              type="button"
                               onClick={() => openMotivoModal(m)}
-                              className="p-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-                              title="Editar"
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                              title={`Editar ${m.motivo_nome}`}
                             >
-                              <Pencil className="size-4" />
+                              <Pencil />
+                              <span className="omni-sr">Editar {m.motivo_nome}</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 if (confirm(`Deseja excluir o motivo "${m.motivo_nome}"?`)) {
                                   deleteMotivoMutation.mutate(m.motivo_id);
                                 }
                               }}
-                              className="p-2 rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                              title="Excluir"
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+                              title={`Excluir ${m.motivo_nome}`}
                             >
-                              <Trash2 className="size-4" />
+                              <Trash2 />
+                              <span className="omni-sr">Excluir {m.motivo_nome}</span>
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
-                    {motivosList.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-10 text-center text-muted-foreground">
-                          Nenhum motivo cadastrado.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="omni-table__foot">
+              <span>
+                {motivosList.length} {motivosList.length === 1 ? "motivo" : "motivos"} cadastrados
+              </span>
+            </div>
           </section>
         )}
-
       </div>
 
-      {/* ══════ MODAL USUÁRIO ══════ */}
+      {/* ══════ Modal: usuário ══════ */}
       {isUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in-0 duration-200">
-          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-base font-bold text-foreground">
-                {editingUser ? "Editar Usuário" : "Adicionar Novo Usuário"}
-              </h3>
-              <button onClick={() => setIsUserModalOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="size-5" />
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-usuario"
+        >
+          <div className="omni-modal w-full max-w-[520px]">
+            <div className="omni-modal__header">
+              <div>
+                <h2 id="titulo-modal-usuario" className="omni-h4">
+                  {editingUser ? "Editar usuário" : "Adicionar usuário"}
+                </h2>
+                <p className="omni-small mt-1">Dados de acesso e permissão no painel</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUserModalOpen(false)}
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+              >
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground">Nome Completo</label>
+            <div className="omni-modal__body omni-stack">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="usuario-nome">
+                  Nome completo <span className="omni-req">*</span>
+                </label>
                 <input
+                  id="usuario-nome"
                   value={formUserNome}
                   onChange={(e) => setFormUserNome(e.target.value)}
-                  placeholder="Nome do usuário"
-                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
+                  placeholder="Nome de quem vai usar o painel"
+                  className="omni-input"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground">E-mail</label>
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="usuario-email">
+                  E-mail <span className="omni-req">*</span>
+                </label>
                 <input
+                  id="usuario-email"
                   type="email"
                   value={formUserEmail}
                   onChange={(e) => setFormUserEmail(e.target.value)}
                   placeholder="email@omniautomacoes.com"
-                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
+                  className="omni-input"
                 />
+                <p className="omni-hint">É por este e-mail que a pessoa faz login.</p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground">Telefone</label>
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="usuario-telefone">
+                  Telefone
+                </label>
                 <input
+                  id="usuario-telefone"
                   value={formUserTelefone}
                   onChange={(e) => setFormUserTelefone(e.target.value)}
                   placeholder="5511999999999"
-                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
+                  className="omni-input num"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">Cargo</label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="usuario-cargo">
+                    Cargo
+                  </label>
                   <select
+                    id="usuario-cargo"
                     value={formUserCargo}
                     onChange={(e) => setFormUserCargo(e.target.value as any)}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
+                    className="omni-select"
                   >
                     <option value="usuario">Usuário</option>
                     <option value="admin">Administrador</option>
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground">Status</label>
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="usuario-status">
+                    Situação
+                  </label>
                   <select
+                    id="usuario-status"
                     value={formUserStatus}
                     onChange={(e) => setFormUserStatus(e.target.value as any)}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
+                    className="omni-select"
                   >
                     <option value="Ativado">Ativado</option>
                     <option value="Desativado">Desativado</option>
@@ -821,119 +930,168 @@ function Configuracoes() {
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-border">
+            <div className="omni-modal__footer">
               <button
+                type="button"
                 onClick={() => setIsUserModalOpen(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="omni-btn omni-btn--ghost"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={() => saveUserMutation.mutate()}
                 disabled={saveUserMutation.isPending || !formUserNome || !formUserEmail}
-                className="flex-1 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] py-2.5 text-xs font-bold text-[#0d0d26] hover:brightness-110 disabled:opacity-50"
+                data-loading={saveUserMutation.isPending ? "true" : undefined}
+                className="omni-btn omni-btn--primary"
               >
-                {saveUserMutation.isPending ? "Salvando..." : "Salvar Usuário"}
+                {editingUser ? "Salvar alterações" : "Cadastrar usuário"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══════ MODAL MOTIVO DE PERDA ══════ */}
+      {/* ══════ Modal: motivo de perda ══════ */}
       {isMotivoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in-0 duration-200">
-          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-base font-bold text-foreground">
-                {editingMotivo ? "Editar Motivo" : "Novo Motivo de Perda"}
-              </h3>
-              <button onClick={() => setIsMotivoModalOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="size-5" />
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-motivo"
+        >
+          <div className="omni-modal w-full max-w-[440px]">
+            <div className="omni-modal__header">
+              <div>
+                <h2 id="titulo-modal-motivo" className="omni-h4">
+                  {editingMotivo ? "Editar motivo" : "Novo motivo de perda"}
+                </h2>
+                <p className="omni-small mt-1">Aparece na lista ao registrar uma perda</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMotivoModalOpen(false)}
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+              >
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground">Descrição do Motivo</label>
+            <div className="omni-modal__body omni-stack">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="motivo-nome">
+                  Descrição do motivo <span className="omni-req">*</span>
+                </label>
                 <input
+                  id="motivo-nome"
                   value={formMotivoNome}
                   onChange={(e) => setFormMotivoNome(e.target.value)}
-                  placeholder="Ex: Preço acima do orçamento"
-                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
+                  placeholder="Ex.: preço acima do orçamento do cliente"
+                  className="omni-input"
                 />
               </div>
 
-              <div className="flex items-center gap-2">
+              <label className="omni-check">
                 <input
                   type="checkbox"
                   id="motivoAtivo"
                   checked={formMotivoAtivo}
                   onChange={(e) => setFormMotivoAtivo(e.target.checked)}
-                  className="size-4 rounded border-input"
                 />
-                <label htmlFor="motivoAtivo" className="text-xs font-medium text-foreground cursor-pointer">
-                  Motivo Ativo
-                </label>
-              </div>
+                <span>Disponível para seleção no funil</span>
+              </label>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-border">
+            <div className="omni-modal__footer">
               <button
+                type="button"
                 onClick={() => setIsMotivoModalOpen(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="omni-btn omni-btn--ghost"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={() => saveMotivoMutation.mutate()}
                 disabled={saveMotivoMutation.isPending || !formMotivoNome.trim()}
-                className="flex-1 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] py-2.5 text-xs font-bold text-[#0d0d26] hover:brightness-110 disabled:opacity-50"
+                data-loading={saveMotivoMutation.isPending ? "true" : undefined}
+                className="omni-btn omni-btn--primary"
               >
-                {saveMotivoMutation.isPending ? "Salvando..." : "Salvar Motivo"}
+                {editingMotivo ? "Salvar alterações" : "Cadastrar motivo"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══════ MODAL ALTERAR SENHA ══════ */}
+      {/* ══════ Modal: alterar senha ══════ */}
       {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in-0 duration-200">
-          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-base font-bold text-foreground">Alterar Senha de Acesso</h3>
-              <button onClick={() => setIsPasswordModalOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="size-5" />
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-senha"
+        >
+          <div className="omni-modal w-full max-w-[440px]">
+            <div className="omni-modal__header">
+              <div>
+                <h2 id="titulo-modal-senha" className="omni-h4">
+                  Alterar senha de acesso
+                </h2>
+                <p className="omni-small mt-1">A troca vale a partir do próximo login</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPasswordModalOpen(false)}
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+              >
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Digite a nova senha desejada para a sua conta.
-              </p>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-accent"
-              />
+            <div className="omni-modal__body">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="nova-senha">
+                  Nova senha <span className="omni-req">*</span>
+                </label>
+                <input
+                  id="nova-senha"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Pelo menos 6 caracteres"
+                  aria-invalid={newPassword.length > 0 && newPassword.length < 6 ? true : undefined}
+                  className="omni-input"
+                />
+                {newPassword.length > 0 && newPassword.length < 6 ? (
+                  <p className="omni-error">
+                    Faltam {6 - newPassword.length} caracteres para atingir o mínimo de 6.
+                  </p>
+                ) : (
+                  <p className="omni-hint">Use pelo menos 6 caracteres.</p>
+                )}
+              </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-border">
+            <div className="omni-modal__footer">
               <button
+                type="button"
                 onClick={() => setIsPasswordModalOpen(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="omni-btn omni-btn--ghost"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={() => changePasswordMutation.mutate(newPassword)}
                 disabled={changePasswordMutation.isPending || newPassword.length < 6}
-                className="flex-1 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] py-2.5 text-xs font-bold text-[#0d0d26] hover:brightness-110 disabled:opacity-50"
+                data-loading={changePasswordMutation.isPending ? "true" : undefined}
+                className="omni-btn omni-btn--primary"
               >
-                {changePasswordMutation.isPending ? "Salvando..." : "Confirmar Senha"}
+                Alterar senha
               </button>
             </div>
           </div>

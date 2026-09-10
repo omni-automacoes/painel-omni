@@ -53,18 +53,27 @@ export function ThemeProvider({
     if (typeof window === "undefined") return;
 
     const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
+    /*
+     * O tema resolvido é escrito em dois lugares:
+     *  - data-theme="light|dark" → tokens do Omni Design System;
+     *  - classe .light/.dark     → variante `dark:` do Tailwind e ui/chart.tsx.
+     * Assim os três estados do guia (claro, escuro por preferência do sistema e
+     * escuro explícito) renderizam com os mesmos valores.
+     */
+    const apply = () => {
+      const resolved = theme === "system" ? (media.matches ? "dark" : "light") : theme;
+      root.classList.remove("light", "dark");
+      root.classList.add(resolved);
+      root.setAttribute("data-theme", resolved);
+    };
 
-      root.classList.add(systemTheme);
-      return;
-    }
+    apply();
 
-    root.classList.add(theme);
+    if (theme !== "system") return;
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
   }, [theme]);
 
   const value = {
@@ -91,8 +100,7 @@ export function ThemeProvider({
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext);
 
-  if (context === undefined)
-    throw new Error("useTheme must be used within a ThemeProvider");
+  if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider");
 
   return context;
 };

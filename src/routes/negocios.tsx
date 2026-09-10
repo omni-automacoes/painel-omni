@@ -5,24 +5,16 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Search,
-  SlidersHorizontal,
   Plus,
   X,
-  Building2,
   Phone,
   Mail,
   CalendarDays,
-  MoreHorizontal,
-  Bot,
-  DollarSign,
   Tag,
   CheckCircle2,
   XCircle,
-  User,
-  Loader2,
-  Sparkles,
   Filter,
-  AlertCircle,
+  Inbox,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
@@ -107,7 +99,9 @@ function parseUtmData(raw: string | UtmData | null | undefined): UtmData | null 
 function parseNumberValue(val: number | string | null | undefined): number {
   if (val === null || val === undefined || val === "") return 0;
   if (typeof val === "number") return val;
-  const cleaned = String(val).replace(/[^\d.,-]/g, "").replace(",", ".");
+  const cleaned = String(val)
+    .replace(/[^\d.,-]/g, "")
+    .replace(",", ".");
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }
@@ -157,6 +151,13 @@ function getInitials(name: string | null | undefined): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+/* Situação do negócio: cor sempre acompanhada de rótulo em texto. */
+const STATUS_BADGE: Record<string, string> = {
+  Aberto: "omni-badge--info",
+  Ganho: "omni-badge--success",
+  Perdido: "omni-badge--danger",
+};
 
 /* ─── Main Component ─── */
 function Negocios() {
@@ -295,67 +296,69 @@ function Negocios() {
   return (
     <AppShell
       title="Negócios"
-      subtitle={`Funil comercial · ${leads.length} ${leads.length === 1 ? "oportunidade ativa" : "oportunidades ativas"}`}
+      subtitle={`${leads.length} ${leads.length === 1 ? "oportunidade" : "oportunidades"} no funil comercial`}
       actions={
         <button
+          type="button"
           onClick={() => setIsNewDealOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm transition-all hover:bg-accent/90 hover:-translate-y-px"
+          className="omni-btn omni-btn--primary omni-btn--sm"
         >
-          <Plus className="size-4" /> Novo negócio
+          <Plus /> Novo negócio
         </button>
       }
       flush
     >
-      <div className="flex h-[calc(100vh-4rem)] flex-col">
-        {/* Header Filters Bar */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-6 py-3">
-          <div className="relative min-w-[220px] flex-1 md:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="flex h-[calc(100vh-var(--omni-topbar-h))] flex-col">
+        {/* ── Filtros ── */}
+        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-3">
+          <div className="omni-input-group min-w-[220px] flex-1 md:max-w-sm">
+            <Search />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar negócio, telefone ou e-mail..."
-              className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/30"
+              placeholder="Buscar negócio, telefone ou e-mail"
+              aria-label="Buscar negócio"
+              className="omni-input pr-9"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="omni-suffix cursor-pointer rounded-xs hover:text-ink"
               >
-                <X className="size-3.5" />
+                <X className="static size-3.5" />
+                <span className="omni-sr">Limpar busca</span>
               </button>
             )}
           </div>
 
-          {/* Status filter buttons */}
-          <div className="flex items-center gap-1">
-            <span className="mr-1 text-xs text-muted-foreground font-medium flex items-center gap-1">
-              <Filter className="size-3.5" /> Status:
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-ink-3">
+              <Filter className="size-3.5" /> Situação
             </span>
-            {["Todos", "Aberto", "Ganho", "Perdido"].map((st) => (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={cn(
-                  "h-8 rounded-lg px-2.5 text-xs font-semibold transition-all",
-                  statusFilter === st
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-secondary text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {st}
-              </button>
-            ))}
+            <div className="omni-btn-group" role="group" aria-label="Filtrar por situação">
+              {["Todos", "Aberto", "Ganho", "Perdido"].map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  aria-pressed={statusFilter === st}
+                  onClick={() => setStatusFilter(st)}
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Origem filter dropdown */}
           {origensDisponiveis.length > 0 && (
             <select
               value={origemFilter}
               onChange={(e) => setOrigemFilter(e.target.value)}
-              className="h-8 rounded-lg border border-border bg-background px-3 text-xs font-medium text-muted-foreground outline-none hover:border-accent focus:border-accent"
+              aria-label="Filtrar por origem"
+              className="omni-select w-auto"
             >
-              <option value="Todas">Todas as Origens</option>
+              <option value="Todas">Todas as origens</option>
               {origensDisponiveis.map((o) => (
                 <option key={o} value={o}>
                   {o}
@@ -364,55 +367,57 @@ function Negocios() {
             </select>
           )}
 
-          <span className="ml-auto text-sm text-muted-foreground">
-            Total no funil:{" "}
-            <strong className="text-foreground">{formatCurrency(totalFunnelValue)}</strong>
+          <span className="ml-auto text-sm text-ink-3">
+            Total no funil{" "}
+            <span className="num font-semibold text-ink">{formatCurrency(totalFunnelValue)}</span>
           </span>
         </div>
 
-        {/* Kanban Board Container */}
+        {/* ── Quadro ── */}
         {isLoading ? (
-          <div className="flex flex-1 items-center justify-center">
-            <div className="flex flex-col items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-8 animate-spin text-accent" />
-              <p className="text-sm font-medium">Carregando negócios reais...</p>
-            </div>
+          <div className="omni-scroll-x flex flex-1 gap-4 p-5">
+            {DEFAULT_STAGES.map((s) => (
+              <div key={s} className="omni-skeleton h-[420px] w-[300px] shrink-0" />
+            ))}
           </div>
         ) : isError ? (
           <div className="flex flex-1 items-center justify-center p-6">
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
-              <p className="font-bold text-destructive">Erro ao carregar dados do Supabase</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {(error as Error)?.message || "Não foi possível conectar ao banco."}
-              </p>
-              <button
-                onClick={() => refetch()}
-                className="mt-4 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                Tentar novamente
-              </button>
+            <div className="omni-alert omni-alert--danger max-w-lg">
+              <XCircle className="omni-alert__icon" />
+              <div className="omni-alert__body">
+                <p className="omni-alert__title">Não foi possível carregar os negócios</p>
+                <p className="omni-alert__text">
+                  {(error as Error)?.message ||
+                    "A conexão com o banco falhou. Verifique a internet e tente de novo."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="omni-btn omni-btn--secondary omni-btn--sm mt-3"
+                >
+                  Tentar de novo
+                </button>
+              </div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 gap-4 overflow-x-auto scrollbar-slim p-6">
+          <div className="omni-scroll-x flex flex-1 gap-4 p-5 scrollbar-slim">
             {columns.map((col) => (
-              <div key={col.stage} className="flex w-[310px] shrink-0 flex-col">
-                {/* Column Header */}
-                <div className="flex items-center justify-between rounded-t-xl border-b-2 border-accent bg-card px-4 py-3 shadow-xs">
-                  <div>
-                    <p className="text-sm font-bold text-foreground">{col.stage}</p>
-                    <p className="text-xs text-muted-foreground">
+              <section key={col.stage} className="flex w-[300px] shrink-0 flex-col">
+                <div className="flex items-start justify-between gap-2 rounded-t-lg border border-b-0 border-line bg-surface px-4 py-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-semibold text-ink">{col.stage}</h2>
+                    <p className="num omni-small">
                       {col.deals.length} {col.deals.length === 1 ? "negócio" : "negócios"} ·{" "}
                       {formatCurrency(col.total)}
                     </p>
                   </div>
-                  <span className="grid size-6 place-items-center rounded-full bg-secondary text-xs font-semibold text-muted-foreground">
+                  <span className="omni-badge omni-badge--outline shrink-0">
                     {col.deals.length}
                   </span>
                 </div>
 
-                {/* Column Body / Cards List */}
-                <div className="flex flex-1 flex-col gap-3 rounded-b-xl bg-secondary/60 p-3 overflow-y-auto scrollbar-slim">
+                <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-b-lg border border-line bg-surface-2 p-3 scrollbar-slim">
                   {col.deals.map((lead) => {
                     const utm = parseUtmData(lead.utm_data);
                     const displayName = lead.lead_nome || lead.lead_telefone || "Sem nome";
@@ -426,44 +431,52 @@ function Negocios() {
                     return (
                       <button
                         key={lead.lead_id}
-                        onClick={() => navigate({ to: "/lead/$leadId", params: { leadId: lead.lead_id } })}
-                        className="group relative rounded-xl border border-border bg-card p-4 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-accent hover:shadow-md"
+                        type="button"
+                        onClick={() =>
+                          navigate({ to: "/lead/$leadId", params: { leadId: lead.lead_id } })
+                        }
+                        className="omni-card group w-full cursor-pointer p-4 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:border-line-strong"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold leading-snug text-foreground group-hover:text-accent">
+                          <p className="text-sm font-semibold leading-snug text-ink">
                             {displayName}
                           </p>
-                          <div className="flex items-center gap-1">
-                            {lead.lead_status === "Perdido" && (
-                              <span
-                                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive"
-                                title={motivoObj ? `Motivo: ${motivoObj.motivo_nome}` : "Perdido"}
-                              >
-                                <XCircle className="size-3" />{" "}
-                                {motivoObj ? motivoObj.motivo_nome : "Perdido"}
-                              </span>
-                            )}
-                          </div>
+                          {lead.lead_status === "Perdido" && (
+                            <span
+                              className="omni-badge omni-badge--danger shrink-0"
+                              title={motivoObj ? `Motivo: ${motivoObj.motivo_nome}` : "Perdido"}
+                            >
+                              <XCircle />
+                              {motivoObj ? motivoObj.motivo_nome : "Perdido"}
+                            </span>
+                          )}
+                          {lead.lead_status === "Ganho" && (
+                            <span className="omni-badge omni-badge--success shrink-0">
+                              <CheckCircle2 />
+                              Ganho
+                            </span>
+                          )}
                         </div>
 
                         {lead.lead_telefone && (
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Phone className="size-3.5 text-muted-foreground/70" />{" "}
-                            {lead.lead_telefone}
+                          <p className="num mt-1 flex items-center gap-1.5 text-xs text-ink-3">
+                            <Phone className="size-3.5" /> {lead.lead_telefone}
                           </p>
                         )}
 
-                        <p className="mt-3 text-lg font-extrabold text-primary">{displayVal}</p>
+                        <p className="num mt-3 text-lg font-bold tracking-tight text-ink">
+                          {displayVal}
+                        </p>
 
-                        <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3">
-                          <span className="max-w-[140px] truncate rounded-md bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-line-subtle pt-3">
+                          <span className="omni-badge omni-badge--brand max-w-[130px] truncate">
                             {tag}
                           </span>
-                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="num flex items-center gap-2 text-xs text-ink-3">
                             <CalendarDays className="size-3.5" /> {formatDate(lead.criado_em)}
                             <span
-                              className="grid size-6 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
-                              title={lead.lead_nome || "Lead"}
+                              className="omni-avatar omni-avatar--sm"
+                              title={lead.lead_nome || "Negócio"}
                             >
                               {getInitials(lead.lead_nome)}
                             </span>
@@ -474,19 +487,21 @@ function Negocios() {
                   })}
 
                   {col.deals.length === 0 && (
-                    <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border/80 p-4 text-center">
-                      <p className="text-xs text-muted-foreground">Nenhum negócio nesta etapa</p>
+                    <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-line-strong px-4 py-6 text-center">
+                      <Inbox className="size-5 text-ink-faint" />
+                      <p className="omni-small">Nenhum negócio nesta etapa</p>
                     </div>
                   )}
 
                   <button
+                    type="button"
                     onClick={() => setIsNewDealOpen(true)}
-                    className="rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-accent hover:bg-card hover:text-foreground"
+                    className="rounded-md border border-dashed border-line-strong py-2 text-xs font-semibold text-ink-3 transition-colors duration-[var(--omni-dur-fast)] hover:border-primary hover:text-ink"
                   >
                     + Adicionar negócio
                   </button>
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}
@@ -530,22 +545,15 @@ function DealDrawer({
   onClose: () => void;
   onUpdate: () => void;
 }) {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [currentStage, setCurrentStage] = useState<string>(
-    lead.lead_etapa_funil || "Novo Lead"
-  );
-  const [currentStatus, setCurrentStatus] = useState<string>(
-    lead.lead_status || "Aberto"
-  );
+  const [currentStage, setCurrentStage] = useState<string>(lead.lead_etapa_funil || "Novo Lead");
+  const [currentStatus, setCurrentStatus] = useState<string>(lead.lead_status || "Aberto");
   const [currentValor, setCurrentValor] = useState<string>(
-    lead.lead_valor !== null && lead.lead_valor !== undefined
-      ? String(lead.lead_valor)
-      : ""
+    lead.lead_valor !== null && lead.lead_valor !== undefined ? String(lead.lead_valor) : "",
   );
   const [currentMotivoPerdaId, setCurrentMotivoPerdaId] = useState<string | null>(
-    lead.motivo_perda_id || null
+    lead.motivo_perda_id || null,
   );
 
   const [isLossModalOpen, setIsLossModalOpen] = useState(false);
@@ -556,10 +564,7 @@ function DealDrawer({
   /* Update mutation */
   const updateMutation = useMutation({
     mutationFn: async (updates: Partial<Lead>) => {
-      const { error } = await supabase
-        .from("leads")
-        .update(updates)
-        .eq("lead_id", lead.lead_id);
+      const { error } = await supabase.from("leads").update(updates).eq("lead_id", lead.lead_id);
 
       if (error) throw error;
     },
@@ -625,236 +630,260 @@ function DealDrawer({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex justify-end bg-foreground/40 backdrop-blur-[2px]">
-        <button className="flex-1" onClick={onClose} aria-label="Fechar" />
-        <aside className="flex h-full w-full max-w-[560px] flex-col bg-card shadow-[var(--shadow-pop)] animate-in slide-in-from-right duration-200">
-          {/* Header */}
-          <header className="bg-primary px-6 py-5 text-primary-foreground">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-primary-foreground/70">
-                  {lead.lead_origem || utm?.source_app || "Lead do Sistema"}
+      <div className="fixed inset-0 z-[var(--omni-z-overlay)] flex justify-end bg-[var(--omni-overlay)]">
+        <button className="flex-1 cursor-default" onClick={onClose} aria-label="Fechar painel" />
+        <aside
+          className="flex h-full w-full max-w-[560px] flex-col border-l border-line bg-surface shadow-lg"
+          aria-label={`Negócio ${displayName}`}
+        >
+          <header className="border-b border-line bg-surface-2 px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="omni-eyebrow">
+                  {lead.lead_origem || utm?.source_app || "Lead do sistema"}
                 </p>
-                <h2 className="text-xl font-extrabold">{displayName}</h2>
-                <p className="mt-1 text-2xl font-extrabold text-accent">
+                <h2 className="omni-h3 mt-1 truncate">{displayName}</h2>
+                <p className="num mt-1 text-2xl font-extrabold tracking-tight text-ink">
                   {formatCurrency(currentValor)}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={onClose}
-                className="rounded-lg p-1.5 text-primary-foreground/80 hover:bg-white/10 hover:text-primary-foreground"
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
               >
-                <X className="size-5" />
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
+                type="button"
                 onClick={markAsGanho}
                 disabled={updateMutation.isPending}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground shadow-sm transition-transform hover:-translate-y-px"
+                className="omni-btn omni-btn--primary omni-btn--sm"
               >
-                <CheckCircle2 className="size-4" /> Marcar como ganho
+                <CheckCircle2 /> Marcar como ganho
               </button>
               <button
+                type="button"
                 onClick={markAsPerdido}
                 disabled={updateMutation.isPending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white/10"
+                className="omni-btn omni-btn--secondary omni-btn--sm"
               >
-                <XCircle className="size-4" /> Registrar perda
+                <XCircle /> Registrar perda
               </button>
             </div>
           </header>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto scrollbar-slim p-6 space-y-6">
-            {/* Quick Controls Section */}
-            <section className="rounded-xl border border-border bg-secondary/30 p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                    Etapa do Funil
-                  </label>
-                  <select
-                    value={currentStage}
-                    onChange={(e) => handleStageChange(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm font-semibold outline-none focus:border-accent"
-                  >
-                    {DEFAULT_STAGES.map((stg) => (
-                      <option key={stg} value={stg}>
-                        {stg}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                    Status do Lead
-                  </label>
-                  <select
-                    value={currentStatus}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm font-semibold outline-none focus:border-accent"
-                  >
-                    <option value="Aberto">Aberto</option>
-                    <option value="Ganho">Ganho</option>
-                    <option value="Perdido">Perdido</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Loss Reason display/edit if status is Perdido */}
-              {currentStatus === "Perdido" && (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wide text-destructive flex items-center gap-1.5">
-                      <XCircle className="size-4" /> Motivo da Perda
+          <div className="omni-stack-6 flex-1 overflow-y-auto p-5 scrollbar-slim">
+            {/* Controles rápidos */}
+            <section className="omni-card omni-card--inset">
+              <div className="omni-card__body omni-stack">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="omni-field">
+                    <label className="omni-label" htmlFor="drawer-etapa">
+                      Etapa do funil
                     </label>
-                    <button
-                      onClick={() => setIsLossModalOpen(true)}
-                      className="text-xs font-semibold text-accent hover:underline"
+                    <select
+                      id="drawer-etapa"
+                      value={currentStage}
+                      onChange={(e) => handleStageChange(e.target.value)}
+                      className="omni-select"
                     >
-                      Alterar motivo
-                    </button>
-                  </div>
-                  <select
-                    value={currentMotivoPerdaId || ""}
-                    onChange={(e) => {
-                      const val = e.target.value || null;
-                      setCurrentMotivoPerdaId(val);
-                      updateMutation.mutate({ motivo_perda_id: val });
-                    }}
-                    className="w-full rounded-lg border border-input bg-card px-3 py-2 text-xs font-semibold outline-none focus:border-accent"
-                  >
-                    <option value="">Nenhum motivo selecionado</option>
-                    {motivosPerda
-                      .filter((m) => m.motivo_ativo || m.motivo_id === currentMotivoPerdaId)
-                      .map((m) => (
-                        <option key={m.motivo_id} value={m.motivo_id}>
-                          {m.motivo_nome}
+                      {DEFAULT_STAGES.map((stg) => (
+                        <option key={stg} value={stg}>
+                          {stg}
                         </option>
                       ))}
-                  </select>
-                </div>
-              )}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                  Valor da Oportunidade (R$)
-                </label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={currentValor}
-                    onChange={(e) => setCurrentValor(e.target.value)}
-                    onBlur={handleSaveValor}
-                    placeholder="0,00"
-                    className="h-9 flex-1 rounded-lg border border-input bg-card px-3 text-sm font-semibold outline-none focus:border-accent"
-                  />
-                  <button
-                    onClick={handleSaveValor}
-                    disabled={updateMutation.isPending}
-                    className="h-9 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                  >
-                    Salvar
-                  </button>
+                  <div className="omni-field">
+                    <label className="omni-label" htmlFor="drawer-status">
+                      Situação
+                    </label>
+                    <select
+                      id="drawer-status"
+                      value={currentStatus}
+                      onChange={(e) => handleStatusChange(e.target.value)}
+                      className="omni-select"
+                    >
+                      <option value="Aberto">Aberto</option>
+                      <option value="Ganho">Ganho</option>
+                      <option value="Perdido">Perdido</option>
+                    </select>
+                  </div>
+                </div>
+
+                {currentStatus === "Perdido" && (
+                  <div className="omni-alert omni-alert--danger">
+                    <XCircle className="omni-alert__icon" />
+                    <div className="omni-alert__body">
+                      <p className="omni-alert__title">Motivo da perda</p>
+                      <select
+                        aria-label="Motivo da perda"
+                        value={currentMotivoPerdaId || ""}
+                        onChange={(e) => {
+                          const val = e.target.value || null;
+                          setCurrentMotivoPerdaId(val);
+                          updateMutation.mutate({ motivo_perda_id: val });
+                        }}
+                        className="omni-select mt-2"
+                      >
+                        <option value="">Nenhum motivo selecionado</option>
+                        {motivosPerda
+                          .filter((m) => m.motivo_ativo || m.motivo_id === currentMotivoPerdaId)
+                          .map((m) => (
+                            <option key={m.motivo_id} value={m.motivo_id}>
+                              {m.motivo_nome}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="omni-field">
+                  <label className="omni-label" htmlFor="drawer-valor">
+                    Valor da oportunidade (R$)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="drawer-valor"
+                      type="number"
+                      step="0.01"
+                      value={currentValor}
+                      onChange={(e) => setCurrentValor(e.target.value)}
+                      onBlur={handleSaveValor}
+                      placeholder="0,00"
+                      className="omni-input num flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveValor}
+                      disabled={updateMutation.isPending}
+                      className="omni-btn omni-btn--secondary"
+                    >
+                      Salvar
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
 
-            {/* Customer Data */}
-            <section className="rounded-xl border border-border p-4">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                Dados do cliente
-              </h3>
-              <dl className="mt-3 grid grid-cols-2 gap-4 text-sm">
+            {/* Dados do cliente */}
+            <section className="omni-card">
+              <div className="omni-card__header py-3">
+                <h3 className="omni-eyebrow">Dados do cliente</h3>
+                <span
+                  className={cn("omni-badge", STATUS_BADGE[currentStatus] || "omni-badge--outline")}
+                >
+                  {currentStatus}
+                </span>
+              </div>
+              <dl className="omni-card__body grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Nome Completo</dt>
-                  <dd className="font-semibold text-foreground">{lead.lead_nome || "Não informado"}</dd>
+                  <dt className="omni-small">Nome completo</dt>
+                  <dd className="font-medium text-ink">{lead.lead_nome || "Não informado"}</dd>
                 </div>
-
-                <div>
-                  <dt className="text-xs text-muted-foreground">ID do Lead</dt>
-                  <dd className="font-mono text-xs text-muted-foreground truncate" title={lead.lead_id}>
+                <div className="min-w-0">
+                  <dt className="omni-small">ID do negócio</dt>
+                  <dd className="omni-code truncate" title={lead.lead_id}>
                     {lead.lead_id}
                   </dd>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Phone className="size-4 text-accent" />
-                  <span className="font-medium">{lead.lead_telefone || "Não informado"}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Mail className="size-4 text-accent" />
-                  <span className="truncate font-medium">{lead.lead_email || "Não informado"}</span>
-                </div>
-
                 <div>
-                  <dt className="text-xs text-muted-foreground">Origem</dt>
-                  <dd className="font-medium">{lead.lead_origem || "Outros / Direct"}</dd>
+                  <dt className="omni-small">Telefone</dt>
+                  <dd className="num flex items-center gap-1.5 font-medium text-ink">
+                    <Phone className="size-3.5 text-ink-faint" />
+                    {lead.lead_telefone || "Não informado"}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="omni-small">E-mail</dt>
+                  <dd className="flex items-center gap-1.5 truncate font-medium text-ink">
+                    <Mail className="size-3.5 shrink-0 text-ink-faint" />
+                    {lead.lead_email || "Não informado"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="omni-small">Origem</dt>
+                  <dd className="font-medium text-ink">{lead.lead_origem || "Outros / Direct"}</dd>
                 </div>
               </dl>
             </section>
 
-            {/* Campaign / UTM Info */}
+            {/* Campanha / UTM */}
             {utm && (
-              <section className="rounded-xl border border-border p-4">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                  <Tag className="size-3.5 text-accent" /> Dados de Anúncio / Meta Ads
-                </h3>
-                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+              <section className="omni-card">
+                <div className="omni-card__header py-3">
+                  <h3 className="omni-eyebrow flex items-center gap-1.5">
+                    <Tag className="size-3.5" /> Dados do anúncio
+                  </h3>
+                </div>
+                <dl className="omni-card__body grid grid-cols-2 gap-3 text-xs">
                   {utm.ad_title && (
                     <div className="col-span-2">
-                      <dt className="text-muted-foreground">Título do Anúncio</dt>
-                      <dd className="font-bold text-foreground">{utm.ad_title}</dd>
+                      <dt className="omni-small">Título do anúncio</dt>
+                      <dd className="font-semibold text-ink">{utm.ad_title}</dd>
                     </div>
                   )}
                   {utm.source_app && (
                     <div>
-                      <dt className="text-muted-foreground">Aplicativo de Origem</dt>
-                      <dd className="font-semibold capitalize">{utm.source_app}</dd>
+                      <dt className="omni-small">Aplicativo de origem</dt>
+                      <dd className="font-medium capitalize text-ink">{utm.source_app}</dd>
                     </div>
                   )}
                   {utm.entry_point && (
                     <div>
-                      <dt className="text-muted-foreground">Ponto de Entrada</dt>
-                      <dd className="font-semibold">{utm.entry_point}</dd>
+                      <dt className="omni-small">Ponto de entrada</dt>
+                      <dd className="font-medium text-ink">{utm.entry_point}</dd>
                     </div>
                   )}
                   {utm.ad_id && (
-                    <div>
-                      <dt className="text-muted-foreground">ID do Anúncio</dt>
-                      <dd className="font-mono text-muted-foreground">{utm.ad_id}</dd>
+                    <div className="min-w-0">
+                      <dt className="omni-small">ID do anúncio</dt>
+                      <dd className="omni-code truncate">{utm.ad_id}</dd>
                     </div>
                   )}
                 </dl>
               </section>
             )}
 
-            {/* Activity / Timeline */}
-            <section className="rounded-xl border border-border p-4">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                Histórico & Linha do tempo
-              </h3>
-              <ol className="mt-4 space-y-4 border-l-2 border-border pl-5 text-xs">
-                <li className="relative">
-                  <span className="absolute -left-[27px] top-1 size-3 rounded-full border-2 border-card bg-accent" />
-                  <p className="font-semibold text-foreground">Lead criado no sistema</p>
-                  <p className="text-muted-foreground">{formatDateTimeFull(lead.criado_em)}</p>
-                </li>
-                {lead.lead_etapa_funil && (
-                  <li className="relative">
-                    <span className="absolute -left-[27px] top-1 size-3 rounded-full border-2 border-card bg-primary" />
-                    <p className="font-semibold text-foreground">
-                      Etapa atual: <span className="text-accent font-bold">{lead.lead_etapa_funil}</span>
-                    </p>
-                    <p className="text-muted-foreground">Atualizado recentemente</p>
+            {/* Linha do tempo */}
+            <section className="omni-card">
+              <div className="omni-card__header py-3">
+                <h3 className="omni-eyebrow">Histórico</h3>
+              </div>
+              <div className="omni-card__body">
+                <ol className="omni-timeline">
+                  <li className="omni-timeline__item">
+                    <span className="omni-timeline__mark">
+                      <Plus />
+                    </span>
+                    <div className="omni-timeline__body">
+                      <p className="omni-timeline__title">Negócio criado no sistema</p>
+                      <p className="omni-timeline__meta">{formatDateTimeFull(lead.criado_em)}</p>
+                    </div>
                   </li>
-                )}
-              </ol>
+                  {lead.lead_etapa_funil && (
+                    <li className="omni-timeline__item">
+                      <span className="omni-timeline__mark">
+                        <CalendarDays />
+                      </span>
+                      <div className="omni-timeline__body">
+                        <p className="omni-timeline__title">
+                          Etapa atual:{" "}
+                          <span className="font-semibold">{lead.lead_etapa_funil}</span>
+                        </p>
+                        <p className="omni-timeline__meta">Atualizado recentemente</p>
+                      </div>
+                    </li>
+                  )}
+                </ol>
+              </div>
             </section>
           </div>
         </aside>
@@ -888,44 +917,49 @@ function LossReasonModal({
   onConfirm: (motivoId: string | null) => void;
   isPending?: boolean;
 }) {
-  const activeMotivos = motivos.filter(
-    (m) => m.motivo_ativo || m.motivo_id === currentMotivoId
-  );
+  const activeMotivos = motivos.filter((m) => m.motivo_ativo || m.motivo_id === currentMotivoId);
   const [selectedId, setSelectedId] = useState<string>(
-    currentMotivoId || (activeMotivos.length > 0 ? activeMotivos[0].motivo_id : "")
+    currentMotivoId || (activeMotivos.length > 0 ? activeMotivos[0].motivo_id : ""),
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-xs p-4">
-      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-pop border border-border animate-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between border-b border-border pb-4">
-          <div className="flex items-center gap-2">
-            <XCircle className="size-5 text-destructive" />
-            <h2 className="text-lg font-bold text-foreground">Motivo da Perda</h2>
+    <div
+      className="omni-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-modal-perda"
+    >
+      <div className="omni-modal">
+        <div className="omni-modal__header">
+          <div>
+            <h2 id="titulo-modal-perda" className="omni-h4">
+              Motivo da perda
+            </h2>
+            <p className="omni-small mt-1">
+              Registrar o motivo alimenta o diagnóstico de gargalos em Relatórios.
+            </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
           >
-            <X className="size-5" />
+            <X />
+            <span className="omni-sr">Fechar</span>
           </button>
         </div>
 
-        <div className="mt-4 space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Selecione o motivo pelo qual este negócio foi perdido:
-          </p>
-
+        <div className="omni-modal__body">
           {activeMotivos.length > 0 ? (
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <div className="omni-stack-2 max-h-60 overflow-y-auto scrollbar-slim">
               {activeMotivos.map((m) => (
                 <label
                   key={m.motivo_id}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all",
+                    "omni-radio-item cursor-pointer rounded-md border p-3 transition-colors duration-[var(--omni-dur-fast)]",
                     selectedId === m.motivo_id
-                      ? "border-destructive bg-destructive/5 font-semibold text-foreground"
-                      : "border-border bg-background hover:bg-secondary/60 text-muted-foreground"
+                      ? "border-primary bg-primary-soft"
+                      : "border-line hover:bg-surface-2",
                   )}
                 >
                   <input
@@ -934,36 +968,32 @@ function LossReasonModal({
                     value={m.motivo_id}
                     checked={selectedId === m.motivo_id}
                     onChange={() => setSelectedId(m.motivo_id)}
-                    className="accent-destructive"
                   />
                   <span className="text-sm">{m.motivo_nome}</span>
                 </label>
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              Nenhum motivo de perda cadastrado ou ativo.
+            <div className="omni-empty">
+              <h4>Nenhum motivo cadastrado</h4>
+              <p>Cadastre os motivos de perda em Configurações para poder classificar aqui.</p>
             </div>
           )}
+        </div>
 
-          <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => onConfirm(selectedId || null)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-4 py-2 text-xs font-bold text-destructive-foreground shadow-sm hover:bg-destructive/90"
-            >
-              {isPending && <Loader2 className="size-3.5 animate-spin" />}
-              Confirmar Perda
-            </button>
-          </div>
+        <div className="omni-modal__footer">
+          <button type="button" onClick={onClose} className="omni-btn omni-btn--ghost">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            data-loading={isPending ? "true" : undefined}
+            onClick={() => onConfirm(selectedId || null)}
+            className="omni-btn omni-btn--danger"
+          >
+            Registrar perda
+          </button>
         </div>
       </div>
     </div>
@@ -971,13 +1001,7 @@ function LossReasonModal({
 }
 
 /* ─── New Deal Modal Component ─── */
-function NewDealModal({
-  onClose,
-  onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
+function NewDealModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { user } = useAuth();
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -985,6 +1009,7 @@ function NewDealModal({
   const [origem, setOrigem] = useState("Meta Ads");
   const [etapa, setEtapa] = useState("Novo Lead");
   const [valor, setValor] = useState("");
+  const [contatoInvalido, setContatoInvalido] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -1015,128 +1040,161 @@ function NewDealModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim() && !telefone.trim()) {
+      setContatoInvalido(true);
       toast.error("Preencha pelo menos o nome ou telefone do lead.");
       return;
     }
+    setContatoInvalido(false);
     createMutation.mutate();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-xs p-4">
-      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-pop border border-border animate-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between border-b border-border pb-4">
-          <h2 className="text-lg font-bold text-foreground">Novo Negócio</h2>
+    <div
+      className="omni-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-modal-negocio"
+    >
+      <div className="omni-modal w-full max-w-[560px]">
+        <div className="omni-modal__header">
+          <div>
+            <h2 id="titulo-modal-negocio" className="omni-h4">
+              Novo negócio
+            </h2>
+            <p className="omni-small mt-1">A oportunidade entra no funil na etapa escolhida</p>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
           >
-            <X className="size-5" />
+            <X />
+            <span className="omni-sr">Fechar</span>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase">
-              Nome do Lead / Empresa
-            </label>
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: João da Silva"
-              className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase">
-                Telefone
+        <form onSubmit={handleSubmit}>
+          <div className="omni-modal__body omni-stack">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="negocio-nome">
+                Nome do contato ou empresa
               </label>
               <input
+                id="negocio-nome"
                 type="text"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                placeholder="5514999999999"
-                className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-accent"
+                value={nome}
+                onChange={(e) => {
+                  setNome(e.target.value);
+                  if (e.target.value.trim()) setContatoInvalido(false);
+                }}
+                aria-invalid={contatoInvalido || undefined}
+                placeholder="Ex.: João da Silva"
+                className="omni-input"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase">
-                E-mail
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="negocio-telefone">
+                  Telefone
+                </label>
+                <input
+                  id="negocio-telefone"
+                  type="text"
+                  value={telefone}
+                  onChange={(e) => {
+                    setTelefone(e.target.value);
+                    if (e.target.value.trim()) setContatoInvalido(false);
+                  }}
+                  aria-invalid={contatoInvalido || undefined}
+                  placeholder="5514999999999"
+                  className="omni-input num"
+                />
+              </div>
+
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="negocio-email">
+                  E-mail
+                </label>
+                <input
+                  id="negocio-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="contato@empresa.com"
+                  className="omni-input"
+                />
+              </div>
+            </div>
+
+            {contatoInvalido && (
+              <p className="omni-error">
+                Informe o nome ou o telefone — é por eles que o negócio é identificado no funil.
+              </p>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="negocio-etapa">
+                  Etapa do funil
+                </label>
+                <select
+                  id="negocio-etapa"
+                  value={etapa}
+                  onChange={(e) => setEtapa(e.target.value)}
+                  className="omni-select"
+                >
+                  {DEFAULT_STAGES.map((stg) => (
+                    <option key={stg} value={stg}>
+                      {stg}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="negocio-valor">
+                  Valor estimado (R$)
+                </label>
+                <input
+                  id="negocio-valor"
+                  type="number"
+                  step="0.01"
+                  value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                  placeholder="1500,00"
+                  className="omni-input num"
+                />
+              </div>
+            </div>
+
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="negocio-origem">
+                Origem
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="lead@email.com"
-                className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-accent"
+                id="negocio-origem"
+                type="text"
+                value={origem}
+                onChange={(e) => setOrigem(e.target.value)}
+                placeholder="Ex.: Meta Ads, indicação, outbound"
+                className="omni-input"
               />
+              <p className="omni-hint">A origem alimenta o relatório de canais de aquisição.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase">
-                Etapa do Funil
-              </label>
-              <select
-                value={etapa}
-                onChange={(e) => setEtapa(e.target.value)}
-                className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-xs font-semibold outline-none focus:border-accent"
-              >
-                {DEFAULT_STAGES.map((stg) => (
-                  <option key={stg} value={stg}>
-                    {stg}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase">
-                Valor Estimado (R$)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
-                placeholder="1500,00"
-                className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-accent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase">
-              Origem do Lead
-            </label>
-            <input
-              type="text"
-              value={origem}
-              onChange={(e) => setOrigem(e.target.value)}
-              placeholder="Ex: Meta Ads, Indicação, Outbound"
-              className="mt-1 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
-            >
+          <div className="omni-modal__footer">
+            <button type="button" onClick={onClose} className="omni-btn omni-btn--ghost">
               Cancelar
             </button>
             <button
               type="submit"
               disabled={createMutation.isPending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-xs font-bold text-accent-foreground shadow-sm hover:bg-accent/90"
+              data-loading={createMutation.isPending ? "true" : undefined}
+              className="omni-btn omni-btn--primary"
             >
-              {createMutation.isPending && <Loader2 className="size-3.5 animate-spin" />}
-              Criar Negócio
+              Criar negócio
             </button>
           </div>
         </form>
@@ -1144,4 +1202,3 @@ function NewDealModal({
     </div>
   );
 }
-

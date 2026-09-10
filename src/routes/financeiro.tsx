@@ -22,15 +22,15 @@ import {
   TrendingDown,
   RefreshCw,
   Layers,
-  User,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
+  Info,
 } from "lucide-react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -44,7 +44,10 @@ export const Route = createFileRoute("/financeiro")({
   head: () => ({
     meta: [
       { title: "Financeiro · Omni Automações" },
-      { name: "description", content: "Controle de receitas e despesas empresariais da Omni Automações." },
+      {
+        name: "description",
+        content: "Controle de receitas e despesas empresariais da Omni Automações.",
+      },
     ],
   }),
   component: Financeiro,
@@ -147,6 +150,15 @@ const CATEGORIAS_DESPESA = [
   "Outros",
 ];
 
+/* Situação do lançamento: cor sempre acompanhada de rótulo e ícone. */
+const STATUS_CONFIG: Record<string, { label: string; badge: string; icon: React.ReactNode }> = {
+  recebido: { label: "Recebido", badge: "omni-badge--success", icon: <CheckCircle2 /> },
+  pago: { label: "Pago", badge: "omni-badge--success", icon: <CheckCircle2 /> },
+  pendente: { label: "Pendente", badge: "omni-badge--warning", icon: <Clock /> },
+  atrasado: { label: "Atrasado", badge: "omni-badge--danger", icon: <AlertCircle /> },
+  cancelado: { label: "Cancelado", badge: "omni-badge--outline", icon: <X /> },
+};
+
 /* ─── Helpers ─── */
 const fmtCurrency = (val: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(val) || 0);
@@ -195,6 +207,15 @@ function tipoLabel(item: FinanceiroItem) {
   return "Pontual";
 }
 
+const TOOLTIP_STYLE = {
+  background: "var(--omni-surface)",
+  border: "1px solid var(--omni-border)",
+  borderRadius: "var(--omni-radius-md)",
+  boxShadow: "var(--omni-shadow-md)",
+  fontSize: "var(--omni-text-xs)",
+  color: "var(--omni-text)",
+} as const;
+
 /* ─── Modal Form Component ─── */
 interface ModalFormProps {
   open: boolean;
@@ -219,14 +240,22 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
   const [mesesProjecao, setMesesProjecao] = useState<number>(12);
   const [observacoes, setObservacoes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [descricaoInvalida, setDescricaoInvalida] = useState(false);
+  const [valorInvalido, setValorInvalido] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setDescricaoInvalida(false);
+    setValorInvalido(false);
     if (editingItem) {
       setTipoLancamento(editingItem.tipo_lancamento);
       setDescricao(editingItem.descricao || "");
       setCategoria(editingItem.categoria || CATEGORIAS_RECEITA[0]);
-      setValor(Number(editingItem.valor || 0).toFixed(2).replace(".", ","));
+      setValor(
+        Number(editingItem.valor || 0)
+          .toFixed(2)
+          .replace(".", ","),
+      );
       setStatus(editingItem.status || "pendente");
       setTipoSub(editingItem.tipo_sub || "pontual");
       setClienteOuFornecedor(editingItem.cliente_ou_fornecedor ?? "");
@@ -276,8 +305,18 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
   const numValor = () => parseFloat(valor.replace(/\./g, "").replace(",", ".")) || 0;
 
   const handleSave = async () => {
-    if (!descricao.trim()) { toast.error("Informe a descrição!"); return; }
-    if (numValor() <= 0) { toast.error("Informe um valor válido!"); return; }
+    if (!descricao.trim()) {
+      setDescricaoInvalida(true);
+      toast.error("Informe a descrição!");
+      return;
+    }
+    if (numValor() <= 0) {
+      setValorInvalido(true);
+      toast.error("Informe um valor válido!");
+      return;
+    }
+    setDescricaoInvalida(false);
+    setValorInvalido(false);
     setSaving(true);
     try {
       if (tipoLancamento === "receita") {
@@ -294,7 +333,10 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
             cliente_nome: clienteOuFornecedor || null,
             observacoes: observacoes || null,
           };
-          const { error } = await supabase.from("receitas").update(payload).eq("receita_id", editingItem.id);
+          const { error } = await supabase
+            .from("receitas")
+            .update(payload)
+            .eq("receita_id", editingItem.id);
           if (error) throw error;
           toast.success("Receita atualizada com sucesso!");
         } else if (tipoSub === "recorrente") {
@@ -313,12 +355,18 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
               data_recebimento: isFirst && status === "recebido" ? dataLiquidacao : null,
               cliente_nome: clienteOuFornecedor || null,
               recorrente_grupo_id: grupoId,
-              observacoes: observacoes ? `${observacoes}${i > 0 ? ` (Mês ${i + 1}/${mesesProjecao})` : ""}` : (i > 0 ? `Projeção automática recorrência (${i + 1}/${mesesProjecao})` : null),
+              observacoes: observacoes
+                ? `${observacoes}${i > 0 ? ` (Mês ${i + 1}/${mesesProjecao})` : ""}`
+                : i > 0
+                  ? `Projeção automática recorrência (${i + 1}/${mesesProjecao})`
+                  : null,
             });
           }
           const { error } = await supabase.from("receitas").insert(rowsToInsert);
           if (error) throw error;
-          toast.success(`Receita recorrente criada e projetada para os próximos ${mesesProjecao} meses!`);
+          toast.success(
+            `Receita recorrente criada e projetada para os próximos ${mesesProjecao} meses!`,
+          );
         } else {
           const payload: Partial<Receita> = {
             descricao: descricao.trim(),
@@ -354,7 +402,10 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
             fornecedor: clienteOuFornecedor || null,
             observacoes: observacoes || null,
           };
-          const { error } = await supabase.from("despesas").update(payload).eq("despesa_id", editingItem.id);
+          const { error } = await supabase
+            .from("despesas")
+            .update(payload)
+            .eq("despesa_id", editingItem.id);
           if (error) throw error;
           toast.success("Despesa atualizada com sucesso!");
         } else if (tipoSub === "recorrente") {
@@ -374,12 +425,18 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
               data_pagamento: isFirst && status === "pago" ? dataLiquidacao : null,
               fornecedor: clienteOuFornecedor || null,
               recorrente_grupo_id: grupoId,
-              observacoes: observacoes ? `${observacoes}${i > 0 ? ` (Mês ${i + 1}/${mesesProjecao})` : ""}` : (i > 0 ? `Projeção automática recorrência (${i + 1}/${mesesProjecao})` : null),
+              observacoes: observacoes
+                ? `${observacoes}${i > 0 ? ` (Mês ${i + 1}/${mesesProjecao})` : ""}`
+                : i > 0
+                  ? `Projeção automática recorrência (${i + 1}/${mesesProjecao})`
+                  : null,
             });
           }
           const { error } = await supabase.from("despesas").insert(rowsToInsert);
           if (error) throw error;
-          toast.success(`Despesa recorrente criada e projetada para os próximos ${mesesProjecao} meses!`);
+          toast.success(
+            `Despesa recorrente criada e projetada para os próximos ${mesesProjecao} meses!`,
+          );
         } else if (tipoSub === "parcelada") {
           const grupoId = crypto.randomUUID();
           const rowsToInsert: any[] = [];
@@ -400,7 +457,9 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
               data_pagamento: isFirst && status === "pago" ? dataLiquidacao : null,
               fornecedor: clienteOuFornecedor || null,
               recorrente_grupo_id: grupoId,
-              observacoes: observacoes ? `${observacoes} (Parcela ${i + 1}/${totalParcelas})` : `Parcela ${i + 1}/${totalParcelas}`,
+              observacoes: observacoes
+                ? `${observacoes} (Parcela ${i + 1}/${totalParcelas})`
+                : `Parcela ${i + 1}/${totalParcelas}`,
             });
           }
           const { error } = await supabase.from("despesas").insert(rowsToInsert);
@@ -441,252 +500,325 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
   const isLiquidado = tipoLancamento === "receita" ? status === "recebido" : status === "pago";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#12122d]/95 backdrop-blur-2xl shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+    <div
+      className="omni-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-modal-lancamento"
+    >
+      <div className="omni-modal w-full max-w-[620px]">
+        <div className="omni-modal__header">
           <div>
-            <h2 className="text-base font-extrabold text-foreground">
-              {editingItem ? "Editar Lançamento" : "Novo Lançamento"}
+            <h2 id="titulo-modal-lancamento" className="omni-h4">
+              {editingItem ? "Editar lançamento" : "Novo lançamento"}
             </h2>
-            <p className="text-xs text-muted-foreground">
-              {tipoLancamento === "receita" ? "Entrada financeira (Receita)" : "Saída financeira (Despesa)"}
+            <p className="omni-small mt-1">
+              {tipoLancamento === "receita" ? "Entrada financeira" : "Saída financeira"}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-white/10 transition-colors">
-            <X className="size-4" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+          >
+            <X />
+            <span className="omni-sr">Fechar</span>
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Tipo de Lançamento */}
-          <div className="grid grid-cols-2 gap-2">
-            {(["receita", "despesa"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTipoLancamento(t)}
-                className={cn(
-                  "flex items-center justify-center gap-2 rounded-xl border py-2.5 text-xs font-bold transition-all",
-                  tipoLancamento === t
-                    ? t === "receita"
-                      ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-400"
-                      : "border-red-500/50 bg-red-500/15 text-red-400"
-                    : "border-white/10 bg-white/5 text-muted-foreground hover:border-white/20"
-                )}
-              >
-                {t === "receita" ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}
-                {t === "receita" ? "Receita (+)" : "Despesa (-)"}
-              </button>
-            ))}
-          </div>
-
-          {/* Sub-tipo */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Tipo de Ocorrência</label>
-            <div className="flex gap-2 flex-wrap">
-              {(tipoLancamento === "receita" ? ["pontual", "recorrente"] : ["pontual", "recorrente", "parcelada"]).map((t) => (
+        <div className="omni-modal__body omni-stack max-h-[70vh] overflow-y-auto scrollbar-slim">
+          {/* Tipo de lançamento */}
+          <div className="omni-field">
+            <span className="omni-label">Tipo de lançamento</span>
+            <div className="omni-btn-group" role="group" aria-label="Tipo de lançamento">
+              {(["receita", "despesa"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setTipoSub(t)}
-                  className={cn(
-                    "rounded-lg border px-3 py-1.5 text-xs font-semibold capitalize transition-all",
-                    tipoSub === t
-                      ? "border-accent/50 bg-accent/15 text-accent"
-                      : "border-white/10 bg-white/5 text-muted-foreground hover:border-accent/30"
-                  )}
+                  aria-pressed={tipoLancamento === t}
+                  onClick={() => setTipoLancamento(t)}
+                  className="omni-btn omni-btn--secondary"
                 >
-                  {t === "parcelada" ? "Parcelada" : t === "recorrente" ? "Recorrente (Mensal)" : "Pontual (Única)"}
+                  {t === "receita" ? <ArrowDownLeft /> : <ArrowUpRight />}
+                  {t === "receita" ? "Receita (entrada)" : "Despesa (saída)"}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Destaque informativo de Recorrência */}
-          {tipoSub === "recorrente" && !editingItem && (
-            <div className="rounded-xl border border-accent/30 bg-accent/10 p-3 text-xs space-y-2">
-              <div className="flex items-center gap-1.5 text-accent font-bold">
-                <Sparkles className="size-4" />
-                <span>Projeção Automática de Recorrência</span>
-              </div>
-              <p className="text-muted-foreground text-[11px] leading-relaxed">
-                Este lançamento se repetirá mês a mês. O 1º mês terá o status definido abaixo, e os meses seguintes serão gerados automaticamente como <strong className="text-foreground">Pendente</strong>.
-              </p>
-              <div className="flex items-center gap-2 pt-1">
-                <span className="text-[11px] font-semibold text-foreground">Projetar para:</span>
-                <select
-                  value={mesesProjecao}
-                  onChange={(e) => setMesesProjecao(Number(e.target.value))}
-                  className="rounded-lg border border-accent/40 bg-[#12122d] px-2 py-1 text-xs font-bold text-accent outline-none cursor-pointer"
+          {/* Sub-tipo */}
+          <div className="omni-field">
+            <span className="omni-label">Tipo de ocorrência</span>
+            <div className="omni-btn-group" role="group" aria-label="Tipo de ocorrência">
+              {(tipoLancamento === "receita"
+                ? ["pontual", "recorrente"]
+                : ["pontual", "recorrente", "parcelada"]
+              ).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={tipoSub === t}
+                  onClick={() => setTipoSub(t)}
+                  className="omni-btn omni-btn--secondary"
                 >
-                  <option value={6}>Próximos 6 meses</option>
-                  <option value={12}>Próximos 12 meses (1 ano)</option>
-                  <option value={24}>Próximos 24 meses (2 anos)</option>
-                </select>
+                  {t === "parcelada" ? "Parcelada" : t === "recorrente" ? "Recorrente" : "Pontual"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Projeção da recorrência */}
+          {tipoSub === "recorrente" && !editingItem && (
+            <div className="omni-alert omni-alert--info">
+              <Info className="omni-alert__icon" />
+              <div className="omni-alert__body">
+                <p className="omni-alert__title">Projeção automática da recorrência</p>
+                <p className="omni-alert__text">
+                  O primeiro mês fica com a situação escolhida abaixo. Os meses seguintes são
+                  criados como <strong>pendentes</strong>.
+                </p>
+                <div className="omni-field mt-2">
+                  <label className="omni-label" htmlFor="meses-projecao">
+                    Projetar para
+                  </label>
+                  <select
+                    id="meses-projecao"
+                    value={mesesProjecao}
+                    onChange={(e) => setMesesProjecao(Number(e.target.value))}
+                    className="omni-select"
+                  >
+                    <option value={6}>Próximos 6 meses</option>
+                    <option value={12}>Próximos 12 meses</option>
+                    <option value={24}>Próximos 24 meses</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Parcelas (somente parcelada) */}
+          {/* Parcelas */}
           {tipoSub === "parcelada" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Parcela Atual</label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="parcela-atual">
+                  Parcela atual
+                </label>
                 <input
+                  id="parcela-atual"
                   type="number"
                   min={1}
                   value={parcelaAtual}
                   onChange={(e) => setParcelaAtual(Number(e.target.value) || 1)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                  className="omni-input num"
                 />
               </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Total de Parcelas</label>
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="total-parcelas">
+                  Total de parcelas
+                </label>
                 <input
+                  id="total-parcelas"
                   type="number"
                   min={1}
                   value={totalParcelas}
                   onChange={(e) => setTotalParcelas(Number(e.target.value) || 1)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                  className="omni-input num"
                 />
               </div>
             </div>
           )}
 
           {/* Descrição */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Descrição *</label>
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="lanc-descricao">
+              Descrição <span className="omni-req">*</span>
+            </label>
             <input
+              id="lanc-descricao"
               value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder={tipoLancamento === "receita" ? "Ex: Mensalidade Painel Omni - Cliente Rex" : "Ex: Pagamento Murilo - Salário"}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+              onChange={(e) => {
+                setDescricao(e.target.value);
+                if (e.target.value.trim()) setDescricaoInvalida(false);
+              }}
+              aria-invalid={descricaoInvalida || undefined}
+              placeholder={
+                tipoLancamento === "receita"
+                  ? "Ex.: Mensalidade Painel Omni — Cliente Rex"
+                  : "Ex.: Pagamento Murilo — pró-labore"
+              }
+              className="omni-input"
             />
+            {descricaoInvalida && (
+              <p className="omni-error">
+                Escreva uma descrição — é por ela que o lançamento é encontrado na busca.
+              </p>
+            )}
           </div>
 
           {/* Categoria + Valor */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Categoria *</label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="lanc-categoria">
+                Categoria <span className="omni-req">*</span>
+              </label>
               <select
+                id="lanc-categoria"
                 value={categoria}
                 onChange={(e) => setCategoria(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-select"
               >
-                {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categorias.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
-                {tipoSub === "parcelada" ? "Valor por Parcela (R$) *" : tipoSub === "recorrente" ? "Valor Mensal (R$) *" : "Valor (R$) *"}
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="lanc-valor">
+                {tipoSub === "parcelada"
+                  ? "Valor por parcela (R$)"
+                  : tipoSub === "recorrente"
+                    ? "Valor mensal (R$)"
+                    : "Valor (R$)"}{" "}
+                <span className="omni-req">*</span>
               </label>
               <input
+                id="lanc-valor"
                 value={valor}
-                onChange={(e) => setValor(e.target.value)}
+                onChange={(e) => {
+                  setValor(e.target.value);
+                  setValorInvalido(false);
+                }}
+                aria-invalid={valorInvalido || undefined}
                 placeholder="0,00"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input num"
               />
+              {valorInvalido && (
+                <p className="omni-error">Digite um valor maior que zero, no formato 1.250,00.</p>
+              )}
             </div>
           </div>
 
           {/* Cliente / Fornecedor */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
-              <User className="inline size-3 mr-1" />
-              {tipoLancamento === "receita" ? "Cliente" : "Fornecedor / Colaborador"}
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="lanc-contraparte">
+              {tipoLancamento === "receita" ? "Cliente" : "Fornecedor ou colaborador"}
             </label>
             <input
+              id="lanc-contraparte"
               value={clienteOuFornecedor}
               onChange={(e) => setClienteOuFornecedor(e.target.value)}
-              placeholder={tipoLancamento === "receita" ? "Ex: Auto Center Rex" : "Ex: Murilo / Meta Platforms"}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+              placeholder={
+                tipoLancamento === "receita" ? "Ex.: Auto Center Rex" : "Ex.: Meta Platforms"
+              }
+              className="omni-input"
             />
           </div>
 
           {/* Status */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
-              Status do 1º Mês
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="lanc-status">
+              Situação do primeiro mês
             </label>
             <select
+              id="lanc-status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+              className="omni-select"
             >
               {(tipoLancamento === "receita"
-                ? [["pendente", "Pendente"], ["recebido", "Recebido"], ["atrasado", "Atrasado"], ["cancelado", "Cancelado"]]
-                : [["pendente", "Pendente"], ["pago", "Pago"], ["atrasado", "Atrasado"], ["cancelado", "Cancelado"]]
-              ).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                ? [
+                    ["pendente", "Pendente"],
+                    ["recebido", "Recebido"],
+                    ["atrasado", "Atrasado"],
+                    ["cancelado", "Cancelado"],
+                  ]
+                : [
+                    ["pendente", "Pendente"],
+                    ["pago", "Pago"],
+                    ["atrasado", "Atrasado"],
+                    ["cancelado", "Cancelado"],
+                  ]
+              ).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
             </select>
           </div>
 
           {/* Datas */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Competência Inicial</label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="lanc-competencia">
+                Competência inicial
+              </label>
               <input
+                id="lanc-competencia"
                 type="date"
                 value={dataCompetencia}
                 onChange={(e) => setDataCompetencia(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input num"
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Vencimento Inicial *</label>
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="lanc-vencimento">
+                Vencimento inicial <span className="omni-req">*</span>
+              </label>
               <input
+                id="lanc-vencimento"
                 type="date"
                 value={dataVencimento}
                 onChange={(e) => setDataVencimento(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input num"
               />
             </div>
           </div>
 
           {isLiquidado && (
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
-                Data de {tipoLancamento === "receita" ? "Recebimento" : "Pagamento"}
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="lanc-liquidacao">
+                Data de {tipoLancamento === "receita" ? "recebimento" : "pagamento"}
               </label>
               <input
+                id="lanc-liquidacao"
                 type="date"
                 value={dataLiquidacao}
                 onChange={(e) => setDataLiquidacao(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input num"
               />
             </div>
           )}
 
           {/* Observações */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Observações</label>
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="lanc-observacoes">
+              Observações
+            </label>
             <textarea
+              id="lanc-observacoes"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               rows={2}
-              placeholder="Notas internas..."
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60 resize-none"
+              placeholder="Notas internas sobre este lançamento"
+              className="omni-textarea"
             />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-muted-foreground hover:bg-white/10 transition-all"
-          >
+        <div className="omni-modal__footer">
+          <button type="button" onClick={onClose} className="omni-btn omni-btn--ghost">
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-5 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all disabled:opacity-50"
+            data-loading={saving ? "true" : undefined}
+            className="omni-btn omni-btn--primary"
           >
-            {saving ? "Salvando..." : editingItem ? "Atualizar" : "Criar Lançamento"}
+            {editingItem ? "Salvar alterações" : "Criar lançamento"}
           </button>
         </div>
       </div>
@@ -706,7 +838,9 @@ function Financeiro() {
   /* Estados de Filtro de Mês e Ano */
   const [selectedYear, setSelectedYear] = useState<number | "todos">(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number | "todos">(currentMonth);
-  const [dateBasis, setDateBasis] = useState<"vencimento" | "competencia" | "liquidacao">("vencimento");
+  const [dateBasis, setDateBasis] = useState<"vencimento" | "competencia" | "liquidacao">(
+    "vencimento",
+  );
 
   /* Estados de Filtro Geral */
   const [search, setSearch] = useState("");
@@ -719,7 +853,10 @@ function Financeiro() {
   const { data: receitas = [], isLoading: loadingR } = useQuery({
     queryKey: ["receitas"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("receitas").select("*").order("data_vencimento", { ascending: false });
+      const { data, error } = await supabase
+        .from("receitas")
+        .select("*")
+        .order("data_vencimento", { ascending: false });
       if (error) {
         console.error("Erro ao buscar receitas:", error);
         return [];
@@ -732,7 +869,10 @@ function Financeiro() {
   const { data: despesas = [], isLoading: loadingD } = useQuery({
     queryKey: ["despesas"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("despesas").select("*").order("data_vencimento", { ascending: false });
+      const { data, error } = await supabase
+        .from("despesas")
+        .select("*")
+        .order("data_vencimento", { ascending: false });
       if (error) {
         console.error("Erro ao buscar despesas:", error);
         return [];
@@ -775,19 +915,26 @@ function Financeiro() {
       data_liquidacao: d.data_pagamento,
       tipo_sub: d.tipo || "pontual",
       cliente_ou_fornecedor: d.fornecedor,
-      extra: d.tipo === "parcelada" && d.parcela_atual && d.total_parcelas ? `${d.parcela_atual}/${d.total_parcelas}` : null,
+      extra:
+        d.tipo === "parcelada" && d.parcela_atual && d.total_parcelas
+          ? `${d.parcela_atual}/${d.total_parcelas}`
+          : null,
       recorrente_grupo_id: d.recorrente_grupo_id,
       observacoes: d.observacoes,
       raw: d,
     }));
 
-    return [...rs, ...ds].sort((a, b) => (b.data_vencimento || "").localeCompare(a.data_vencimento || ""));
+    return [...rs, ...ds].sort((a, b) =>
+      (b.data_vencimento || "").localeCompare(a.data_vencimento || ""),
+    );
   }, [receitas, despesas]);
 
   /* Contador de transações por mês no ano selecionado */
   const monthCounters = useMemo(() => {
     const counts: Record<number, number> = {};
-    MESES.forEach((m) => { counts[m.idx] = 0; });
+    MESES.forEach((m) => {
+      counts[m.idx] = 0;
+    });
 
     const targetYear = selectedYear === "todos" ? null : selectedYear;
 
@@ -917,7 +1064,9 @@ function Financeiro() {
   /* Dados do gráfico comparativo */
   const chartData = useMemo(() => {
     const map: Record<string, { Receitas: number; Despesas: number }> = {};
-    MESES.forEach((m) => { map[m.abrev] = { Receitas: 0, Despesas: 0 }; });
+    MESES.forEach((m) => {
+      map[m.abrev] = { Receitas: 0, Despesas: 0 };
+    });
 
     const targetYear = selectedYear === "todos" ? currentYear : selectedYear;
 
@@ -955,13 +1104,21 @@ function Financeiro() {
     const today = todayISO();
     try {
       if (item.tipo_lancamento === "receita") {
-        const { error } = await supabase.from("receitas").update({ status: "recebido", data_recebimento: today }).eq("receita_id", item.id);
+        const { error } = await supabase
+          .from("receitas")
+          .update({ status: "recebido", data_recebimento: today })
+          .eq("receita_id", item.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("despesas").update({ status: "pago", data_pagamento: today }).eq("despesa_id", item.id);
+        const { error } = await supabase
+          .from("despesas")
+          .update({ status: "pago", data_pagamento: today })
+          .eq("despesa_id", item.id);
         if (error) throw error;
       }
-      toast.success(`"${item.descricao}" marcado como ${item.tipo_lancamento === "receita" ? "recebido" : "pago"}!`);
+      toast.success(
+        `"${item.descricao}" marcado como ${item.tipo_lancamento === "receita" ? "recebido" : "pago"}!`,
+      );
       queryClient.invalidateQueries({ queryKey: ["receitas"] });
       queryClient.invalidateQueries({ queryKey: ["despesas"] });
     } catch (e: any) {
@@ -988,8 +1145,23 @@ function Financeiro() {
   };
 
   const exportCSV = () => {
-    if (filtered.length === 0) { toast.error("Nenhum dado para exportar com os filtros atuais."); return; }
-    const headers = ["Tipo", "Descrição", "Categoria", "Valor", "Status", "Vencimento", "Competência", "Liquidação", "Cliente/Fornecedor", "Sub-tipo", "Observações"];
+    if (filtered.length === 0) {
+      toast.error("Nenhum dado para exportar com os filtros atuais.");
+      return;
+    }
+    const headers = [
+      "Tipo",
+      "Descrição",
+      "Categoria",
+      "Valor",
+      "Status",
+      "Vencimento",
+      "Competência",
+      "Liquidação",
+      "Cliente/Fornecedor",
+      "Sub-tipo",
+      "Observações",
+    ];
     const rows = filtered.map((i) => [
       i.tipo_lancamento,
       `"${(i.descricao || "").replace(/"/g, '""')}"`,
@@ -1008,7 +1180,10 @@ function Financeiro() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const nomePeriodo = selectedMonth === "todos" ? `Ano_${selectedYear}` : `${MESES[selectedMonth as number].nome}_${selectedYear}`;
+    const nomePeriodo =
+      selectedMonth === "todos"
+        ? `Ano_${selectedYear}`
+        : `${MESES[selectedMonth as number].nome}_${selectedYear}`;
     a.download = `financeiro_omni_${nomePeriodo}_${todayISO()}.csv`;
     document.body.appendChild(a);
     a.click();
@@ -1016,68 +1191,66 @@ function Financeiro() {
     toast.success("CSV exportado com sucesso!");
   };
 
-  const statusConfig: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    recebido: { label: "Recebido", cls: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30", icon: <CheckCircle2 className="size-3" /> },
-    pago: { label: "Pago", cls: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30", icon: <CheckCircle2 className="size-3" /> },
-    pendente: { label: "Pendente", cls: "text-amber-400 bg-amber-500/15 border-amber-500/30", icon: <Clock className="size-3" /> },
-    atrasado: { label: "Atrasado", cls: "text-red-400 bg-red-500/15 border-red-500/30", icon: <AlertCircle className="size-3" /> },
-    cancelado: { label: "Cancelado", cls: "text-slate-400 bg-slate-500/15 border-slate-500/30", icon: <X className="size-3" /> },
-  };
-
   const periodoTextoAtivo = useMemo(() => {
-    if (selectedMonth === "todos" && selectedYear === "todos") return "Todo o Histórico Geral";
-    if (selectedMonth === "todos") return `Ano Todo de ${selectedYear}`;
-    if (selectedYear === "todos") return `Mês de ${MESES[selectedMonth as number].nome} (Todos os Anos)`;
+    if (selectedMonth === "todos" && selectedYear === "todos") return "todo o histórico";
+    if (selectedMonth === "todos") return `o ano de ${selectedYear}`;
+    if (selectedYear === "todos") return `${MESES[selectedMonth as number].nome} (todos os anos)`;
     return `${MESES[selectedMonth as number].nome} de ${selectedYear}`;
   }, [selectedMonth, selectedYear]);
 
+  const baseTexto =
+    dateBasis === "vencimento"
+      ? "vencimento"
+      : dateBasis === "competencia"
+        ? "competência"
+        : "liquidação";
+
   return (
     <AppShell
-      title="Financeiro Empresarial"
-      subtitle={`Controle de receitas, despesas e fluxo de caixa · ${periodoTextoAtivo}`}
+      title="Financeiro"
+      subtitle={`Receitas, despesas e fluxo de caixa de ${periodoTextoAtivo}`}
       actions={
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={exportCSV}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/80 px-3.5 py-2 text-xs font-bold text-foreground hover:bg-secondary hover:border-accent/40 transition-all"
+            className="omni-btn omni-btn--secondary omni-btn--sm"
           >
-            <Download className="size-4 text-accent" /> Exportar CSV
+            <Download /> Exportar CSV
           </button>
           <button
             type="button"
-            onClick={() => { setEditingItem(null); setModalOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all"
+            onClick={() => {
+              setEditingItem(null);
+              setModalOpen(true);
+            }}
+            className="omni-btn omni-btn--primary omni-btn--sm"
           >
-            <Plus className="size-4" /> Novo Lançamento
+            <Plus /> Novo lançamento
           </button>
         </div>
       }
     >
-      <div className="w-full space-y-6">
+      <div className="omni-stack-6 w-full">
+        {/* ══════ 1. Período ══════ */}
 
-        {/* ══════ 1. NAVEGADOR E SELETOR COMPLETO DE MESES E ANOS ══════ */}
-        <section className="rounded-2xl border border-border bg-card/90 p-4 backdrop-blur-2xl shadow-xl space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-accent">
-                <Calendar className="size-4 text-accent" />
-                Período Selecionado:
-              </span>
-              <span className="rounded-lg bg-accent/15 border border-accent/30 px-2.5 py-1 text-xs font-extrabold text-accent">
-                {periodoTextoAtivo}
-              </span>
-            </div>
+        <section className="omni-card">
+          <div className="omni-card__header flex-wrap gap-3 py-3">
+            <span className="flex items-center gap-2 text-sm font-medium text-ink-2">
+              <Calendar className="size-4 text-ink-3" /> Período
+              <span className="omni-badge omni-badge--brand">{periodoTextoAtivo}</span>
+            </span>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center rounded-xl border border-border bg-secondary/50 p-0.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="omni-btn-group" role="group" aria-label="Navegar meses">
                 <button
                   type="button"
                   onClick={handlePrevMonth}
-                  title="Mês Anterior"
-                  className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+                  title="Mês anterior"
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
                 >
-                  <ChevronLeft className="size-4" />
+                  <ChevronLeft />
+                  <span className="omni-sr">Mês anterior</span>
                 </button>
                 <button
                   type="button"
@@ -1085,65 +1258,72 @@ function Financeiro() {
                     setSelectedMonth(currentMonth);
                     setSelectedYear(currentYear);
                   }}
-                  className="px-2.5 py-1 text-[11px] font-bold text-foreground hover:text-accent transition-colors"
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
                 >
                   Hoje
                 </button>
                 <button
                   type="button"
                   onClick={handleNextMonth}
-                  title="Próximo Mês"
-                  className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+                  title="Próximo mês"
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
                 >
-                  <ChevronRight className="size-4" />
+                  <ChevronRight />
+                  <span className="omni-sr">Próximo mês</span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase">Ano:</span>
+              <div className="flex items-center gap-2">
+                <label className="omni-label text-xs" htmlFor="filtro-ano">
+                  Ano
+                </label>
                 <select
+                  id="filtro-ano"
                   value={selectedYear}
                   onChange={(e) => {
                     const v = e.target.value;
                     setSelectedYear(v === "todos" ? "todos" : Number(v));
                   }}
-                  className="h-8 rounded-xl border border-input bg-background px-2.5 text-xs font-bold text-foreground outline-none focus:border-accent/60 cursor-pointer"
+                  className="omni-select w-auto"
                 >
                   {ANOS_DISPONIVEIS.map((ano) => (
-                    <option key={ano} value={ano}>{ano}</option>
+                    <option key={ano} value={ano}>
+                      {ano}
+                    </option>
                   ))}
-                  <option value="todos">Todos os Anos</option>
+                  <option value="todos">Todos os anos</option>
                 </select>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase">Base:</span>
+              <div className="flex items-center gap-2">
+                <label className="omni-label text-xs" htmlFor="filtro-base">
+                  Base
+                </label>
                 <select
+                  id="filtro-base"
                   value={dateBasis}
                   onChange={(e) => setDateBasis(e.target.value as any)}
-                  className="h-8 rounded-xl border border-input bg-background px-2.5 text-xs font-bold text-foreground outline-none focus:border-accent/60 cursor-pointer"
-                  title="Selecione qual data utilizar para o filtro mensal"
+                  className="omni-select w-auto"
                 >
-                  <option value="vencimento">Data de Vencimento</option>
-                  <option value="competencia">Data de Competência</option>
-                  <option value="liquidacao">Data de Liquidação (Pago/Recebido)</option>
+                  <option value="vencimento">Vencimento</option>
+                  <option value="competencia">Competência</option>
+                  <option value="liquidacao">Liquidação</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 scrollbar-none">
+          <div className="omni-scroll-x flex items-center gap-1.5 p-3 scrollbar-slim">
             <button
               type="button"
+              aria-pressed={selectedMonth === "todos"}
               onClick={() => setSelectedMonth("todos")}
               className={cn(
-                "rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap shrink-0",
-                selectedMonth === "todos"
-                  ? "bg-gradient-to-r from-[#fba834] to-[#f7931e] text-[#0d0d26] shadow-md shadow-[#fba834]/25"
-                  : "border border-border bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                "omni-btn omni-btn--secondary omni-btn--sm shrink-0",
+                selectedMonth === "todos" && "border-primary bg-primary-soft text-primary-soft-fg",
               )}
             >
-              Ano Todo ({selectedYear})
+              Ano todo
             </button>
 
             {MESES.map((m) => {
@@ -1155,314 +1335,436 @@ function Financeiro() {
                 <button
                   key={m.idx}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => setSelectedMonth(m.idx)}
                   className={cn(
-                    "rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0",
-                    isSelected
-                      ? "bg-gradient-to-r from-[#fba834] to-[#f7931e] text-[#0d0d26] shadow-md shadow-[#fba834]/25"
-                      : "border border-border bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground hover:border-accent/30"
+                    "omni-btn omni-btn--secondary omni-btn--sm shrink-0",
+                    isSelected && "border-primary bg-primary-soft text-primary-soft-fg",
                   )}
                 >
-                  <span>{m.abrev}</span>
+                  {m.abrev}
                   {isThisCurrentMonth && !isSelected && (
-                    <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" title="Mês Atual" />
+                    <span className="omni-badge omni-badge--info">hoje</span>
                   )}
+                  {count > 0 && <span className="num opacity-70">{count}</span>}
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* ══════ 2. CARDS DE KPIS DO MÊS SELECIONADO ══════ */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-emerald-500/20 bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-500 flex items-center gap-1.5">
-                <TrendingUp className="size-4" /> Receitas
+        {/* ══════ 2. Indicadores do período ══════ */}
+
+        <section className="omni-grid omni-grid-4" aria-label="Indicadores do período">
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <TrendingUp className="size-3.5" /> Receitas recebidas
               </span>
-              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500"><ArrowDownLeft className="size-4" /></span>
-            </div>
-            <p className="text-2xl font-extrabold text-foreground">{fmtCurrency(kpis.rRecebido)}</p>
-            <p className="text-xs text-muted-foreground flex justify-between">
-              <span className="text-emerald-500 font-semibold">↑ Recebidas</span>
-              <span>{fmtCurrency(kpis.rPendente)} pendente</span>
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-red-500/20 bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-red-400 flex items-center gap-1.5">
-                <TrendingDown className="size-4" /> Despesas
-              </span>
-              <span className="p-1.5 rounded-lg bg-red-500/10 text-red-400"><ArrowUpRight className="size-4" /></span>
-            </div>
-            <p className="text-2xl font-extrabold text-foreground">{fmtCurrency(kpis.dPago)}</p>
-            <p className="text-xs text-muted-foreground flex justify-between">
-              <span className="text-red-400 font-semibold">↑ Pagas</span>
-              <span>{fmtCurrency(kpis.dPendente)} pendente</span>
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-accent/30 bg-gradient-to-br from-card to-accent/10 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-1.5">
-                <Building2 className="size-4" /> Resultado
-              </span>
-              <span className="rounded-lg bg-accent/20 px-2 py-1 text-[10px] font-bold text-accent">{kpis.margem}% margem</span>
-            </div>
-            <p className={cn("text-2xl font-extrabold", kpis.saldo >= 0 ? "text-accent" : "text-red-400")}>
-              {fmtCurrency(kpis.saldo)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Lucro de {periodoTextoAtivo}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Clock className="size-4 text-accent" /> Pendências
-              </span>
-              <DollarSign className="size-5 text-accent/50" />
-            </div>
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-bold">A Receber</p>
-                <p className="text-lg font-extrabold text-emerald-400">{fmtCurrency(kpis.rPendente)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-muted-foreground uppercase font-bold">A Pagar</p>
-                <p className="text-lg font-extrabold text-red-400">{fmtCurrency(kpis.dPendente)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ══════ 3. BARRA DE BUSCA E FILTROS ADICIONAIS ══════ */}
-        <div className="rounded-2xl border border-border bg-card/90 p-4 backdrop-blur-2xl shadow-xl flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por descrição, categoria, cliente ou fornecedor..."
-              className="h-10 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={filterTipo}
-              onChange={(e) => setFilterTipo(e.target.value as any)}
-              className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-semibold text-foreground outline-none focus:border-accent/60 cursor-pointer"
-            >
-              <option value="todos">Todos os Tipos (Receitas + Despesas)</option>
-              <option value="receita">Apenas Receitas (+)</option>
-              <option value="despesa">Apenas Despesas (-)</option>
-            </select>
-
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-semibold text-foreground outline-none focus:border-accent/60 cursor-pointer"
-            >
-              <option value="todos">Todos os Status</option>
-              <option value="recebido">Recebidos</option>
-              <option value="pago">Pagos</option>
-              <option value="pendente">Pendentes</option>
-              <option value="atrasado">Atrasados</option>
-              <option value="cancelado">Cancelados</option>
-            </select>
-          </div>
-        </div>
-
-        {/* ══════ 4. GRÁFICO COMPARATIVO ANUAL ══════ */}
-        <section className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h3 className="text-sm font-extrabold text-foreground">
-                Fluxo de Caixa Mensal ({selectedYear === "todos" ? currentYear : selectedYear})
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Comparativo de receitas recebidas vs despesas pagas mês a mês
+              <p className="omni-stat__value">{fmtCurrency(kpis.rRecebido)}</p>
+              <p className="omni-stat__foot">
+                <span className="num">{fmtCurrency(kpis.rPendente)}</span> ainda a receber
               </p>
             </div>
-            <div className="flex items-center gap-4 text-xs font-bold">
-              <span className="flex items-center gap-1.5 text-emerald-400"><span className="size-2.5 rounded-full bg-emerald-500" /> Receitas (R$)</span>
-              <span className="flex items-center gap-1.5 text-red-400"><span className="size-2.5 rounded-full bg-red-500" /> Despesas (R$)</span>
+          </div>
+
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <TrendingDown className="size-3.5" /> Despesas pagas
+              </span>
+              <p className="omni-stat__value">{fmtCurrency(kpis.dPago)}</p>
+              <p className="omni-stat__foot">
+                <span className="num">{fmtCurrency(kpis.dPendente)}</span> ainda a pagar
+              </p>
             </div>
           </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ left: -10, right: 10, top: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="m" tickLine={false} axisLine={false} fontSize={11} stroke="#64748b" />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} stroke="#64748b" />
-                <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                  contentStyle={{ backgroundColor: "#12122d", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", fontSize: 12, color: "#fff" }}
-                  formatter={(val: any) => fmtCurrency(Number(val))}
-                />
-                <Bar dataKey="Receitas" fill="#10b981" radius={[5, 5, 0, 0]} />
-                <Bar dataKey="Despesas" fill="#f43f5e" radius={[5, 5, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <Building2 className="size-3.5" /> Resultado
+              </span>
+              <p className={cn("omni-stat__value", kpis.saldo < 0 && "text-danger")}>
+                {fmtCurrency(kpis.saldo)}
+              </p>
+              <p className="omni-stat__foot">
+                <span
+                  className={cn(
+                    "omni-badge",
+                    kpis.saldo >= 0 ? "omni-badge--success" : "omni-badge--danger",
+                  )}
+                >
+                  {kpis.saldo >= 0 ? "No azul" : "No vermelho"}
+                </span>
+                <span className="num">{String(kpis.margem).replace(".", ",")}% de margem</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <Clock className="size-3.5" /> Pendências
+              </span>
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="omni-small">A receber</p>
+                  <p className="num text-lg font-bold text-ink">{fmtCurrency(kpis.rPendente)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="omni-small">A pagar</p>
+                  <p className="num text-lg font-bold text-ink">{fmtCurrency(kpis.dPendente)}</p>
+                </div>
+              </div>
+              <p className="omni-stat__foot">
+                <DollarSign className="size-3.5" /> Em aberto no período
+              </p>
+            </div>
           </div>
         </section>
 
-        {/* ══════ 5. TABELA DE LANÇAMENTOS DO MÊS FILTRADO ══════ */}
-        <section className="overflow-hidden rounded-2xl border border-border bg-card/90 backdrop-blur-2xl shadow-xl">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        {/* ══════ 3. Busca e filtros ══════ */}
+
+        <div className="omni-card">
+          <div className="omni-card__body flex flex-wrap items-end gap-4 py-4">
+            <div className="omni-field min-w-[240px] flex-1">
+              <label className="omni-label" htmlFor="busca-lancamento">
+                Buscar lançamento
+              </label>
+              <div className="omni-input-group">
+                <Search />
+                <input
+                  id="busca-lancamento"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Descrição, categoria, cliente ou fornecedor"
+                  className="omni-input"
+                />
+              </div>
+            </div>
+
+            <div className="omni-field w-full sm:w-52">
+              <label className="omni-label" htmlFor="filtro-tipo">
+                Tipo
+              </label>
+              <select
+                id="filtro-tipo"
+                value={filterTipo}
+                onChange={(e) => setFilterTipo(e.target.value as any)}
+                className="omni-select"
+              >
+                <option value="todos">Receitas e despesas</option>
+                <option value="receita">Apenas receitas</option>
+                <option value="despesa">Apenas despesas</option>
+              </select>
+            </div>
+
+            <div className="omni-field w-full sm:w-52">
+              <label className="omni-label" htmlFor="filtro-situacao">
+                Situação
+              </label>
+              <select
+                id="filtro-situacao"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="omni-select"
+              >
+                <option value="todos">Todas as situações</option>
+                <option value="recebido">Recebidos</option>
+                <option value="pago">Pagos</option>
+                <option value="pendente">Pendentes</option>
+                <option value="atrasado">Atrasados</option>
+                <option value="cancelado">Cancelados</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* ══════ 4. Fluxo de caixa mensal ══════ */}
+
+        <section className="omni-card">
+          <div className="omni-card__header">
             <div>
-              <h3 className="text-base font-extrabold text-foreground">
-                Lançamentos · {periodoTextoAtivo} ({filtered.length})
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Entradas e saídas filtradas por {dateBasis === "vencimento" ? "vencimento" : dateBasis === "competencia" ? "competência" : "data de liquidação"}
+              <h2 className="omni-h4">
+                Fluxo de caixa mensal em {selectedYear === "todos" ? currentYear : selectedYear}
+              </h2>
+              <p className="omni-small mt-0.5">
+                Receitas recebidas e despesas pagas, por {baseTexto}
               </p>
             </div>
           </div>
+          <div className="omni-card__body">
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ left: 4, right: 8, top: 4 }} barGap={2}>
+                  <CartesianGrid
+                    stroke="var(--omni-chart-grid)"
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="m"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: "var(--omni-text-3)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={64}
+                    tick={{ fill: "var(--omni-text-3)", fontSize: 10 }}
+                    tickFormatter={(v) => `R$ ${(Number(v) / 1000).toFixed(0)} mil`}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "var(--omni-surface-2)" }}
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={{ color: "var(--omni-text)", fontWeight: 700 }}
+                    formatter={(val: any, name: any) => [fmtCurrency(Number(val)), name]}
+                  />
+                  <Legend
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{
+                      fontSize: "var(--omni-text-xs)",
+                      color: "var(--omni-text-2)",
+                      paddingTop: 8,
+                    }}
+                  />
+                  <Bar dataKey="Receitas" fill="var(--omni-chart-1)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Despesas" fill="var(--omni-chart-2)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
 
-          {/* Destaque inteligente se houver dados em outro ano para o mesmo mês */}
+        {/* ══════ 5. Lançamentos ══════ */}
+
+        <section className="omni-table-wrap">
+          <div className="omni-card__header">
+            <div>
+              <h2 className="omni-h4">Lançamentos de {periodoTextoAtivo}</h2>
+              <p className="omni-small mt-0.5">Filtrados por data de {baseTexto}</p>
+            </div>
+            <span className="omni-badge omni-badge--outline">{filtered.length}</span>
+          </div>
+
           {otherYearsWithData.length > 0 && (
-            <div className="m-6 rounded-xl border border-accent/40 bg-accent/10 p-4 text-xs flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-foreground">
-                <Sparkles className="size-4 text-accent shrink-0" />
-                <span>
-                  Existem lançamentos em <strong>{MESES[selectedMonth as number].nome}</strong> no ano de <strong>{otherYearsWithData.join(", ")}</strong>!
-                </span>
-              </div>
-              <div className="flex gap-2">
-                {otherYearsWithData.map((ano) => (
-                  <button
-                    key={ano}
-                    type="button"
-                    onClick={() => setSelectedYear(ano)}
-                    className="rounded-lg bg-gradient-to-r from-[#fba834] to-[#f7931e] px-3.5 py-1.5 text-xs font-bold text-[#0d0d26] shadow-sm hover:brightness-110 transition-all"
-                  >
-                    Ver {MESES[selectedMonth as number].abrev}/{ano}
-                  </button>
-                ))}
+            <div className="p-5 pb-0">
+              <div className="omni-alert omni-alert--info">
+                <Info className="omni-alert__icon" />
+                <div className="omni-alert__body">
+                  <p className="omni-alert__title">
+                    Há lançamentos de {MESES[selectedMonth as number].nome} em outro ano
+                  </p>
+                  <p className="omni-alert__text">
+                    Encontramos registros em {otherYearsWithData.join(", ")}. Troque o ano para
+                    vê-los.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {otherYearsWithData.map((ano) => (
+                      <button
+                        key={ano}
+                        type="button"
+                        onClick={() => setSelectedYear(ano)}
+                        className="omni-btn omni-btn--secondary omni-btn--sm"
+                      >
+                        Ver {MESES[selectedMonth as number].abrev}/{ano}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {isLoading ? (
-            <div className="py-16 text-center text-muted-foreground text-sm">Carregando lançamentos...</div>
-          ) : filtered.length === 0 ? (
-            <div className="py-16 text-center space-y-2">
-              <DollarSign className="size-10 mx-auto text-muted-foreground/30" />
-              <p className="text-sm font-semibold text-muted-foreground">
-                Nenhum lançamento encontrado em {periodoTextoAtivo}
-              </p>
-              <p className="text-xs text-muted-foreground/60">
-                Selecione outro mês na barra superior ou clique em "+ Novo Lançamento" para cadastrar.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+          <div className="omni-table-scroll">
+            <table className="omni-table">
+              <thead>
+                <tr>
+                  <th className="omni-th-num">Vencimento</th>
+                  <th>Descrição</th>
+                  <th>Categoria</th>
+                  <th>Ocorrência</th>
+                  <th>Cliente / fornecedor</th>
+                  <th className="omni-th-num">Valor</th>
+                  <th>Situação</th>
+                  <th className="omni-th-num">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  [0, 1, 2, 3, 4, 5].map((i) => (
+                    <tr key={i}>
+                      <td colSpan={8} className="p-0">
+                        <div className="omni-skeleton h-row w-full rounded-none" />
+                      </td>
+                    </tr>
+                  ))
+                ) : filtered.length === 0 ? (
                   <tr>
-                    <th className="px-5 py-3.5">Vencimento</th>
-                    <th className="px-5 py-3.5">Descrição</th>
-                    <th className="px-5 py-3.5">Categoria</th>
-                    <th className="px-5 py-3.5">Tipo</th>
-                    <th className="px-5 py-3.5">Cliente/Fornecedor</th>
-                    <th className="px-5 py-3.5 text-right">Valor</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5 text-right">Ações</th>
+                    <td colSpan={8} className="p-0">
+                      <div className="omni-empty">
+                        <span className="omni-empty__art">
+                          <DollarSign />
+                        </span>
+                        <h4>Nenhum lançamento em {periodoTextoAtivo}</h4>
+                        <p>
+                          Escolha outro mês na barra acima ou cadastre uma entrada ou saída para
+                          este período.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingItem(null);
+                            setModalOpen(true);
+                          }}
+                          className="omni-btn omni-btn--secondary omni-btn--sm"
+                        >
+                          <Plus /> Novo lançamento
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {filtered.map((item) => {
+                ) : (
+                  filtered.map((item) => {
                     const isReceita = item.tipo_lancamento === "receita";
-                    const st = statusConfig[item.status] ?? statusConfig["pendente"];
+                    const st = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pendente;
                     const isLiquidado = item.status === "recebido" || item.status === "pago";
                     return (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs font-semibold text-foreground">{fmtDate(item.data_vencimento)}</span>
+                      <tr key={item.id} className="group">
+                        <td className="omni-td-num">
+                          {fmtDate(item.data_vencimento)}
                           {item.data_liquidacao && (
-                            <p className="text-[10px] text-muted-foreground">↳ liquidado {fmtDate(item.data_liquidacao)}</p>
+                            <p className="omni-small">liquidado {fmtDate(item.data_liquidacao)}</p>
                           )}
                         </td>
-                        <td className="px-5 py-3.5">
+
+                        <td>
                           <div className="flex items-center gap-2.5">
-                            <span className={cn("shrink-0 rounded-lg p-1.5", isReceita ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-400")}>
-                              {isReceita ? <ArrowDownLeft className="size-3.5" /> : <ArrowUpRight className="size-3.5" />}
+                            <span
+                              className={cn(
+                                "grid size-7 shrink-0 place-items-center rounded-sm",
+                                isReceita
+                                  ? "bg-success-soft text-success"
+                                  : "bg-danger-soft text-danger",
+                              )}
+                              aria-hidden="true"
+                            >
+                              {isReceita ? (
+                                <ArrowDownLeft className="size-3.5" />
+                              ) : (
+                                <ArrowUpRight className="size-3.5" />
+                              )}
                             </span>
-                            <span className="font-semibold text-foreground text-xs leading-snug max-w-[220px] truncate">{item.descricao}</span>
+                            <span className="omni-td-strong max-w-[240px] truncate">
+                              {item.descricao}
+                            </span>
                           </div>
                         </td>
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs text-muted-foreground">{item.categoria}</span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold",
-                            item.tipo_sub === "recorrente" ? "border-blue-500/30 bg-blue-500/10 text-blue-400" :
-                            item.tipo_sub === "parcelada" ? "border-purple-500/30 bg-purple-500/10 text-purple-400" :
-                            "border-slate-500/20 bg-slate-500/10 text-slate-400"
-                          )}>
-                            {item.tipo_sub === "recorrente" && <RefreshCw className="size-2.5" />}
-                            {item.tipo_sub === "parcelada" && <Layers className="size-2.5" />}
+
+                        <td className="text-ink-2">{item.categoria}</td>
+
+                        <td>
+                          <span
+                            className={cn(
+                              "omni-badge",
+                              item.tipo_sub === "recorrente"
+                                ? "omni-badge--info"
+                                : item.tipo_sub === "parcelada"
+                                  ? "omni-badge--brand"
+                                  : "omni-badge--outline",
+                            )}
+                          >
+                            {item.tipo_sub === "recorrente" && <RefreshCw />}
+                            {item.tipo_sub === "parcelada" && <Layers />}
                             {tipoLabel(item)}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs text-muted-foreground">{item.cliente_ou_fornecedor || "—"}</span>
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          <span className={cn("text-sm font-extrabold", isReceita ? "text-emerald-400" : "text-red-400")}>
-                            {isReceita ? "+" : "-"}{fmtCurrency(item.valor)}
+
+                        <td className="text-ink-2">{item.cliente_ou_fornecedor || "—"}</td>
+
+                        <td className="omni-td-num">
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              isReceita ? "text-success" : "text-danger",
+                            )}
+                          >
+                            {isReceita ? "+" : "−"}
+                            {fmtCurrency(item.valor)}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold", st.cls)}>
+
+                        <td>
+                          <span className={cn("omni-badge", st.badge)}>
                             {st.icon} {st.label}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                        <td className="omni-td-actions">
+                          <div className="inline-flex items-center gap-1">
                             {!isLiquidado && item.status !== "cancelado" && (
                               <button
                                 type="button"
                                 onClick={() => marcarLiquidado(item)}
-                                title={isReceita ? "Marcar como Recebido" : "Marcar como Pago"}
-                                className="rounded-lg p-1.5 text-emerald-400 hover:bg-emerald-500/15 transition-colors"
+                                title={isReceita ? "Marcar como recebido" : "Marcar como pago"}
+                                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-success hover:bg-success-soft"
                               >
-                                <CheckCircle2 className="size-4" />
+                                <CheckCircle2 />
+                                <span className="omni-sr">
+                                  {isReceita ? "Marcar como recebido" : "Marcar como pago"}
+                                </span>
                               </button>
                             )}
                             <button
                               type="button"
-                              onClick={() => { setEditingItem(item); setModalOpen(true); }}
-                              className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 transition-colors"
+                              onClick={() => {
+                                setEditingItem(item);
+                                setModalOpen(true);
+                              }}
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                              title={`Editar ${item.descricao}`}
                             >
-                              <Pencil className="size-4" />
+                              <Pencil />
+                              <span className="omni-sr">Editar {item.descricao}</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => excluir(item)}
-                              className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/15 transition-colors"
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+                              title={`Excluir ${item.descricao}`}
                             >
-                              <Trash2 className="size-4" />
+                              <Trash2 />
+                              <span className="omni-sr">Excluir {item.descricao}</span>
                             </button>
                           </div>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="omni-table__foot">
+            <span>
+              {filtered.length} {filtered.length === 1 ? "lançamento" : "lançamentos"} em{" "}
+              {periodoTextoAtivo}
+            </span>
+            <span className="num">Resultado {fmtCurrency(kpis.saldo)}</span>
+          </div>
         </section>
       </div>
 
       <ModalForm
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingItem(null); }}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingItem(null);
+        }}
         editingItem={editingItem}
         onSaved={() => {
           queryClient.invalidateQueries({ queryKey: ["receitas"] });

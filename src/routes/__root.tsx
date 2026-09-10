@@ -18,19 +18,17 @@ import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+    <div className="omni-root flex min-h-screen items-center justify-center bg-bg px-4">
+      <div className="w-full max-w-prose text-center">
+        <p className="omni-eyebrow">Erro 404</p>
+        <h1 className="omni-h2 mt-2">Esta página não existe</h1>
+        <p className="omni-p mx-auto mt-3 text-ink-2">
+          O endereço pode ter mudado ou o registro foi removido. Volte para a visão geral e continue
+          de lá.
         </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
+        <div className="mt-6 flex justify-center">
+          <Link to="/" className="omni-btn omni-btn--primary">
+            Ir para a visão geral
           </Link>
         </div>
       </div>
@@ -46,29 +44,26 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+    <div className="omni-root flex min-h-screen items-center justify-center bg-bg px-4">
+      <div className="w-full max-w-prose text-center">
+        <p className="omni-eyebrow">Falha ao carregar</p>
+        <h1 className="omni-h3 mt-2">Esta página não abriu</h1>
+        <p className="omni-p mx-auto mt-3 text-ink-2">
+          A tentativa de carregar os dados falhou. Tente de novo — se o erro continuar, volte para a
+          visão geral e reabra a partir de lá.
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="omni-btn omni-btn--primary"
           >
-            Try again
+            Tentar de novo
           </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
+          <a href="/" className="omni-btn omni-btn--secondary">
+            Ir para a visão geral
           </a>
         </div>
       </div>
@@ -105,7 +100,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap",
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
@@ -119,13 +114,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR" className="dark">
+    <html lang="pt-BR" className="dark" data-theme="dark">
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="omni omni-root">
         {children}
-        <Toaster />
         <Scripts />
       </body>
     </html>
@@ -149,10 +143,10 @@ function AuthShield({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="size-10 animate-spin rounded-full border-4 border-accent border-t-transparent" />
-          <p className="text-sm text-muted-foreground animate-pulse font-medium">Carregando Omni...</p>
+      <div className="omni-root flex min-h-screen items-center justify-center bg-bg">
+        <div className="flex flex-col items-center gap-4">
+          <span className="omni-spinner" style={{ width: 28, height: 28 }} aria-hidden="true" />
+          <p className="text-sm font-medium text-ink-2">Carregando o Omni…</p>
         </div>
       </div>
     );
@@ -178,6 +172,8 @@ function RootComponent() {
             <Outlet />
           </AuthShield>
         </AuthProvider>
+        {/* Dentro do ThemeProvider para o toast seguir o tema escolhido. */}
+        <Toaster />
       </ThemeProvider>
     </QueryClientProvider>
   );

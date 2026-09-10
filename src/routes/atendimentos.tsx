@@ -17,7 +17,7 @@ import {
   Building2,
   Mail,
   PhoneCall,
-  User,
+  Bot,
   MessageCircle,
   MessagesSquare,
   ArrowDown,
@@ -62,7 +62,6 @@ interface Chat {
   online: boolean;
   phone: string;
   email: string;
-  avatarColor: string;
   ativo_ia: boolean;
 }
 
@@ -83,17 +82,12 @@ interface ParsedImageMessage {
   rawText: string;
 }
 
-/* ─── Avatar color palette ─── */
-const AVATAR_COLORS = [
-  "#fba834", // brand gold
-  "#8b5cf6", // purple
-  "#10b981", // emerald
-  "#3b82f6", // blue
-  "#ec4899", // pink
-  "#f97316", // orange
-  "#6366f1", // indigo
-  "#14b8a6", // teal
-];
+/* Situação da conversa: cor sempre acompanhada de rótulo em texto. */
+const STATUS_BADGE: Record<Chat["status"], string> = {
+  Aberto: "omni-badge--info",
+  Pendente: "omni-badge--warning",
+  Resolvido: "omni-badge--success",
+};
 
 /* ─── Helpers de Formatação de Data / Hora estilo WhatsApp ─── */
 function formatChatListTime(rawDate?: string): string {
@@ -177,7 +171,7 @@ function parseImageMessage(text: string): ParsedImageMessage {
 
   if (linkMatch && linkMatch[1]) {
     const imageUrl = linkMatch[1];
-    
+
     // Extrai a descrição após o sufixo ): ou :
     let description = "";
     const splitIndex = text.indexOf("):");
@@ -228,10 +222,13 @@ function Atendimentos() {
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
 
   /* React Query: Fetch Leads (Chats) */
-  const { data: leadsData = [] } = useQuery({
-    queryKey: ['leads'],
+  const { data: leadsData = [], isLoading: isLoadingChats } = useQuery({
+    queryKey: ["leads"],
     queryFn: async () => {
-      const { data, error } = await supabase.from('leads').select('*').order('criado_em', { ascending: false });
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .order("criado_em", { ascending: false });
       if (error) {
         toast.error("Erro ao carregar leads: " + error.message);
         throw error;
@@ -243,9 +240,12 @@ function Atendimentos() {
 
   /* React Query: Fetch Messages */
   const { data: mensagensData = [] } = useQuery({
-    queryKey: ['mensagens'],
+    queryKey: ["mensagens"],
     queryFn: async () => {
-      const { data, error } = await supabase.from('mensagens').select('*').order('criado_em', { ascending: true });
+      const { data, error } = await supabase
+        .from("mensagens")
+        .select("*")
+        .order("criado_em", { ascending: true });
       if (error) {
         toast.error("Erro ao carregar mensagens: " + error.message);
         throw error;
@@ -261,16 +261,16 @@ function Atendimentos() {
     mensagensData.forEach((m: any) => {
       if (!grouped[m.lead_id]) grouped[m.lead_id] = [];
       const date = new Date(m.criado_em);
-      const isClient = m.mensagem_origem === 'Cliente';
+      const isClient = m.mensagem_origem === "Cliente";
       grouped[m.lead_id].push({
         id: m.mensagem_id,
         me: !isClient,
-        text: m.mensagem_conteudo || '',
+        text: m.mensagem_conteudo || "",
         time: isNaN(date.getTime())
           ? ""
           : date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         rawDate: m.criado_em || new Date().toISOString(),
-        readStatus: "read"
+        readStatus: "read",
       });
     });
     return grouped;
@@ -278,10 +278,10 @@ function Atendimentos() {
 
   /* Derived State: chats */
   const chats: Chat[] = useMemo(() => {
-    return leadsData.map((lead: any, index: number) => {
+    return leadsData.map((lead: any) => {
       const leadMsgs = allMessages[lead.lead_id] || [];
       const lastMsg = leadMsgs.length > 0 ? leadMsgs[leadMsgs.length - 1] : null;
-      
+
       let status: "Aberto" | "Pendente" | "Resolvido" = "Aberto";
       if (lead.lead_status === "Pendente") status = "Pendente";
       if (lead.lead_status === "Resolvido") status = "Resolvido";
@@ -293,7 +293,7 @@ function Atendimentos() {
       if (lastMsg) {
         const parsed = parseImageMessage(lastMsg.text);
         if (parsed.isImage) {
-          lastTextSnippet = "📷 [Imagem enviada]";
+          lastTextSnippet = "Imagem enviada";
         } else {
           lastTextSnippet = lastMsg.text;
         }
@@ -301,7 +301,7 @@ function Atendimentos() {
 
       return {
         id: lead.lead_id,
-        name: lead.lead_nome || 'Sem Nome',
+        name: lead.lead_nome || "Sem Nome",
         company: lead.lead_empresa || "Contato Omni",
         last: lastTextSnippet,
         time: formatChatListTime(lastDate),
@@ -310,8 +310,7 @@ function Atendimentos() {
         online: false,
         phone: lead.lead_telefone || "",
         email: lead.lead_email || "",
-        avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length],
-        ativo_ia: lead.ativo_ia === true
+        ativo_ia: lead.ativo_ia === true,
       };
     });
   }, [leadsData, allMessages]);
@@ -320,7 +319,7 @@ function Atendimentos() {
   const msgSearchRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const messages = active ? (allMessages[active] || []) : [];
+  const messages = active ? allMessages[active] || [] : [];
   const chat = chats.find((c) => c.id === active);
 
   /* Agrupamento de Mensagens por Data */
@@ -452,7 +451,10 @@ function Atendimentos() {
     while (idx !== -1) {
       if (idx > lastIndex) parts.push(text.slice(lastIndex, idx));
       parts.push(
-        <mark key={idx} className="rounded bg-accent/40 text-foreground px-0.5 font-semibold">
+        <mark
+          key={idx}
+          className="rounded-xs bg-accent-soft px-0.5 font-semibold text-accent-soft-fg"
+        >
           {text.slice(idx, idx + query.length)}
         </mark>,
       );
@@ -467,51 +469,62 @@ function Atendimentos() {
   const ReadIcon = ({ status }: { status: ReadStatus }) => {
     switch (status) {
       case "sent":
-        return <Check className="size-3.5 text-muted-foreground" />;
+        return <Check className="size-3.5 text-ink-faint" />;
       case "delivered":
-        return <CheckCheck className="size-3.5 text-muted-foreground" />;
+        return <CheckCheck className="size-3.5 text-ink-faint" />;
       case "read":
-        return <CheckCheck className="size-3.5 text-accent" />;
+        return <CheckCheck className="size-3.5 text-info" />;
     }
   };
 
   /* Initials helper */
   const getInitials = (name: string) =>
-    name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
 
   return (
-    <AppShell title="Atendimentos" subtitle={`${chats.length} conversas${totalUnread > 0 ? ` · ${totalUnread} não lidas` : ""}`} flush>
-      <div className="flex h-[calc(100vh-4rem)] bg-background text-foreground font-sans overflow-hidden">
-        
-        {/* ══════ LEFT SIDEBAR: CHAT LIST ══════ */}
-        <section className="flex w-[340px] sm:w-[380px] shrink-0 flex-col border-r border-border bg-card/90 backdrop-blur-xl">
-          
-          {/* Search + Filters */}
-          <div className="border-b border-border p-3.5 space-y-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="chat-search-input"
-                value={searchChat}
-                onChange={(e) => setSearchChat(e.target.value)}
-                placeholder="Pesquisar conversa ou cliente..."
-                className="h-10 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-accent focus:ring-2 focus:ring-accent/20"
-              />
+    <AppShell
+      title="Atendimentos"
+      subtitle={`${chats.length} ${chats.length === 1 ? "conversa" : "conversas"}${totalUnread > 0 ? ` · ${totalUnread} não lidas` : ""}`}
+      flush
+    >
+      <div className="flex h-[calc(100vh-var(--omni-topbar-h))] overflow-hidden bg-bg font-sans text-ink">
+        {/* ══════ Lista de conversas ══════ */}
+        <section
+          className="flex w-[340px] shrink-0 flex-col border-r border-line bg-surface sm:w-[380px]"
+          aria-label="Conversas"
+        >
+          <div className="flex flex-col gap-3 border-b border-line px-3 py-4">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="chat-search-input">
+                Buscar conversa
+              </label>
+              <div className="omni-input-group">
+                <Search />
+                <input
+                  id="chat-search-input"
+                  value={searchChat}
+                  onChange={(e) => setSearchChat(e.target.value)}
+                  placeholder="Nome do cliente ou empresa"
+                  className="omni-input"
+                />
+              </div>
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
+            <div className="omni-tabs scrollbar-slim" role="tablist" aria-label="Filtrar conversas">
               {filterLabels.map((f, i) => (
                 <button
                   key={f}
                   id={`filter-btn-${f.toLowerCase()}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={filterTab === i}
                   onClick={() => setFilterTab(i)}
-                  className={cn(
-                    "rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 whitespace-nowrap",
-                    filterTab === i
-                      ? "bg-gradient-to-r from-[#fba834] to-[#f7931e] text-[#0d0d26] font-bold shadow-md shadow-[#fba834]/20"
-                      : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground border border-border/50",
-                  )}
+                  className="omni-tab text-sm"
                 >
                   {f}
                 </button>
@@ -519,142 +532,122 @@ function Atendimentos() {
             </div>
           </div>
 
-          {/* List of Chats */}
-          <ul className="flex-1 overflow-y-auto scrollbar-slim divide-y divide-border/40">
-            {filteredChats.map((c) => (
-              <li key={c.id}>
-                <button
-                  id={`chat-item-${c.id}`}
-                  onClick={() => selectChat(c.id)}
-                  className={cn(
-                    "flex w-full gap-3.5 px-4 py-3.5 text-left transition-all duration-150 relative group",
-                    c.id === active
-                      ? "bg-accent/15 border-l-4 border-l-accent"
-                      : "hover:bg-secondary/60",
-                  )}
-                >
-                  {/* Avatar */}
-                  <span className="relative shrink-0">
-                    <span
-                      className="grid size-12 place-items-center rounded-2xl text-sm font-bold text-white shadow-md border border-border"
-                      style={{ backgroundColor: c.avatarColor }}
-                    >
+          <ul className="omni-list flex-1 overflow-y-auto scrollbar-slim">
+            {isLoadingChats ? (
+              [0, 1, 2, 3, 4, 5].map((i) => (
+                <li key={i} className="px-4 py-3">
+                  <div className="omni-skeleton h-12 w-full" />
+                </li>
+              ))
+            ) : filteredChats.length === 0 ? (
+              <li>
+                <div className="omni-empty">
+                  <span className="omni-empty__art">
+                    <MessagesSquare />
+                  </span>
+                  <h4>Nenhuma conversa aqui</h4>
+                  <p>Ajuste a busca ou volte para a aba "Todos" para ver todos os contatos.</p>
+                </div>
+              </li>
+            ) : (
+              filteredChats.map((c) => (
+                <li key={c.id}>
+                  <button
+                    id={`chat-item-${c.id}`}
+                    type="button"
+                    aria-current={c.id === active ? "true" : undefined}
+                    onClick={() => selectChat(c.id)}
+                    className={cn(
+                      "omni-list__item w-full cursor-pointer text-left transition-colors duration-[var(--omni-dur-fast)]",
+                      c.id === active && "bg-primary-soft hover:bg-primary-soft",
+                    )}
+                  >
+                    <span className="omni-avatar omni-avatar--lg" aria-hidden="true">
                       {getInitials(c.name)}
                     </span>
-                    {c.online && (
-                      <span className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-2 border-card bg-emerald-500" />
-                    )}
-                  </span>
 
-                  {/* Info */}
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-sm font-bold text-foreground group-hover:text-accent transition-colors">
-                        {c.name}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-ink">{c.name}</span>
+                        <span className="num shrink-0 text-xs text-ink-3">{c.time}</span>
                       </span>
-                      <span
-                        className={cn(
-                          "shrink-0 text-[11px] font-medium",
-                          c.unread > 0 ? "text-accent font-bold" : "text-muted-foreground",
+
+                      <span className="block truncate text-xs text-ink-3">{c.company}</span>
+
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs text-ink-3">{c.last}</span>
+                        {c.unread > 0 && (
+                          <span className="omni-badge omni-badge--brand shrink-0">{c.unread}</span>
                         )}
-                      >
-                        {c.time}
                       </span>
                     </span>
-
-                    <span className="block truncate text-xs text-muted-foreground font-medium">
-                      {c.company}
-                    </span>
-
-                    <span className="mt-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-xs text-muted-foreground">
-                        {c.last}
-                      </span>
-                      {c.unread > 0 && (
-                        <span className="grid size-5 shrink-0 animate-pulse place-items-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground shadow-sm">
-                          {c.unread}
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-
-            {filteredChats.length === 0 && (
-              <li className="px-4 py-12 text-center space-y-2">
-                <MessagesSquare className="size-8 text-muted-foreground/40 mx-auto" />
-                <p className="text-sm text-muted-foreground font-medium">Nenhuma conversa encontrada.</p>
-              </li>
+                  </button>
+                </li>
+              ))
             )}
           </ul>
         </section>
 
-        {/* ══════ CENTER: CHAT AREA ══════ */}
-        <section className={cn("flex min-w-0 flex-1 flex-col relative", showInfoPanel && "border-r border-border")}>
+        {/* ══════ Conversa ══════ */}
+        <section className="relative flex min-w-0 flex-1 flex-col">
           {chat ? (
             <>
-              {/* Chat Header */}
-              <header className="flex items-center gap-3.5 border-b border-border bg-card/90 px-5 py-3 backdrop-blur-xl z-10">
-                {/* Avatar */}
-                <span className="relative shrink-0">
-                  <span
-                    className="grid size-10 place-items-center rounded-xl text-xs font-bold text-white shadow-md border border-border"
-                    style={{ backgroundColor: chat.avatarColor }}
-                  >
-                    {getInitials(chat.name)}
-                  </span>
-                  {chat.online && (
-                    <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-emerald-500" />
-                  )}
+              <header className="flex items-center gap-3 border-b border-line bg-surface px-5 py-3">
+                <span className="omni-avatar" aria-hidden="true">
+                  {getInitials(chat.name)}
                 </span>
 
-                {/* Name & Subtitle */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold text-foreground leading-tight">{chat.name}</p>
-                  <p className="truncate text-xs text-muted-foreground font-medium">
-                    {chat.company} · <span className={chat.online ? "text-emerald-500 font-semibold" : "text-muted-foreground"}>{chat.online ? "Online" : chat.status}</span>
+                  <p className="truncate text-md font-semibold leading-tight text-ink">
+                    {chat.name}
+                  </p>
+                  <p className="flex items-center gap-2 truncate text-xs text-ink-3">
+                    {chat.company}
+                    <span className={cn("omni-badge", STATUS_BADGE[chat.status])}>
+                      {chat.status}
+                    </span>
                   </p>
                 </div>
 
-                {/* Actions */}
                 <button
                   id="btn-msg-search"
+                  type="button"
+                  aria-pressed={showMsgSearch}
                   onClick={() => {
                     setShowMsgSearch((v) => !v);
                     if (showMsgSearch) closeSearch();
                   }}
                   className={cn(
-                    "grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
-                    showMsgSearch && "bg-accent/20 text-accent",
+                    "omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm",
+                    showMsgSearch && "bg-surface-3 text-ink",
                   )}
-                  title="Pesquisar mensagens"
+                  title="Buscar nesta conversa"
                 >
-                  <Search className="size-4" />
+                  <Search />
+                  <span className="omni-sr">Buscar nesta conversa</span>
                 </button>
 
                 <button
                   id="btn-info"
+                  type="button"
+                  aria-pressed={showInfoPanel}
                   onClick={() => setShowInfoPanel((v) => !v)}
                   className={cn(
-                    "grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
-                    showInfoPanel && "bg-accent/20 text-accent",
+                    "omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm",
+                    showInfoPanel && "bg-surface-3 text-ink",
                   )}
-                  title="Informações do contato"
+                  title="Dados do contato"
                 >
-                  <Info className="size-4" />
+                  <Info />
+                  <span className="omni-sr">Dados do contato</span>
                 </button>
               </header>
 
-              {/* Message Search Bar */}
-              <div
-                className={cn(
-                  "overflow-hidden border-b border-border bg-card/90 backdrop-blur-xl transition-all duration-200 z-10",
-                  showMsgSearch ? "max-h-14 opacity-100" : "max-h-0 opacity-0",
-                )}
-              >
-                <div className="flex items-center gap-2.5 px-4 py-2.5">
-                  <Search className="size-4 shrink-0 text-muted-foreground" />
+              {showMsgSearch && (
+                <div className="flex items-center gap-3 border-b border-line bg-surface-2 px-5 py-2.5">
+                  <label className="omni-label shrink-0 text-xs" htmlFor="msg-search-input">
+                    Buscar na conversa
+                  </label>
                   <input
                     ref={msgSearchRef}
                     id="msg-search-input"
@@ -664,336 +657,309 @@ function Atendimentos() {
                       if (e.key === "Enter") navigateSearch(e.shiftKey ? -1 : 1);
                       if (e.key === "Escape") closeSearch();
                     }}
-                    placeholder="Pesquisar mensagens nesta conversa…"
-                    className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-accent"
+                    placeholder="Palavra ou frase"
+                    className="omni-input flex-1"
                   />
-                  {matchingIndices.length > 0 && (
-                    <span className="shrink-0 text-xs text-muted-foreground font-semibold">
-                      {highlightIdx + 1}/{matchingIndices.length}
-                    </span>
-                  )}
-                  {matchingIndices.length === 0 && msgSearchQuery.trim() && (
-                    <span className="shrink-0 text-xs text-muted-foreground">0 resultados</span>
-                  )}
+                  <span className="num shrink-0 text-xs text-ink-3" aria-live="polite">
+                    {msgSearchQuery.trim()
+                      ? matchingIndices.length > 0
+                        ? `${highlightIdx + 1} de ${matchingIndices.length}`
+                        : "Nenhum resultado"
+                      : ""}
+                  </span>
                   <button
+                    type="button"
                     onClick={() => navigateSearch(-1)}
-                    className="grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                    className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
                     disabled={matchingIndices.length === 0}
                   >
-                    <ChevronUp className="size-4" />
+                    <ChevronUp />
+                    <span className="omni-sr">Resultado anterior</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => navigateSearch(1)}
-                    className="grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                    className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
                     disabled={matchingIndices.length === 0}
                   >
-                    <ChevronDown className="size-4" />
+                    <ChevronDown />
+                    <span className="omni-sr">Próximo resultado</span>
                   </button>
                   <button
+                    type="button"
                     onClick={closeSearch}
-                    className="grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
                   >
-                    <X className="size-4" />
+                    <X />
+                    <span className="omni-sr">Fechar busca</span>
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* Messages Area */}
               <div
                 ref={messagesContainerRef}
-                className="relative flex-1 overflow-y-auto scrollbar-slim bg-background/50"
+                className="relative flex-1 overflow-y-auto bg-bg-subtle scrollbar-slim"
               >
-                {/* Background Ambient Glow */}
-                <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
-                <div className="absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.04)_1px,transparent_1px)] dark:bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
-
-                <div className="relative space-y-4 px-4 sm:px-8 py-6">
-                  {messageGroups.map((group, groupIdx) => (
-                    <div key={groupIdx} className="space-y-3">
-                      {/* Date Divider Badge */}
-                      <div className="flex justify-center py-2">
-                        <span className="rounded-full bg-card border border-border px-4 py-1 text-xs font-semibold text-muted-foreground backdrop-blur-md shadow-sm">
-                          {group.dateLabel}
-                        </span>
-                      </div>
-
-                      {/* Messages of this day */}
-                      {group.msgs.map((m) => {
-                        const i = messages.findIndex((msg) => msg.id === m.id);
-                        const isHighlighted = highlightIdx >= 0 && matchingIndices[highlightIdx] === i;
-                        const isMatch = matchingIndices.includes(i);
-                        const parsedImage = parseImageMessage(m.text);
-
-                        return (
-                          <div
-                            key={m.id}
-                            id={`msg-${i}`}
-                            className={cn(
-                              "flex transition-all duration-200",
-                              m.me ? "justify-end" : "justify-start",
-                            )}
-                          >
-                            <div
-                              className={cn(
-                                "relative max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 sm:p-3.5 text-sm leading-relaxed shadow-sm backdrop-blur-md transition-all duration-200",
-                                m.me
-                                  ? "rounded-tr-none bg-accent/20 border border-accent/30 text-foreground"
-                                  : "rounded-tl-none bg-card border border-border text-card-foreground",
-                                isHighlighted && "ring-2 ring-accent shadow-xl scale-[1.01]",
-                                isMatch && !isHighlighted && "ring-1 ring-accent/50",
-                              )}
-                            >
-                              {/* Attachment Preview (if doc/file attachment) */}
-                              {m.attachment && (
-                                <div className="mb-2.5 flex items-center gap-3 rounded-xl bg-secondary/80 p-2.5 border border-border">
-                                  <span className="grid size-9 place-items-center rounded-lg bg-accent/20 text-accent">
-                                    {m.attachment.type === "image" ? <ImageIcon className="size-4" /> :
-                                     m.attachment.type === "video" ? <Video className="size-4" /> :
-                                     <FileText className="size-4" />}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-xs font-semibold text-foreground">{m.attachment.name}</p>
-                                    <p className="text-[10px] text-muted-foreground">{m.attachment.size}</p>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Renderizado de Imagem ou Texto */}
-                              {parsedImage.isImage && parsedImage.imageUrl ? (
-                                <div className="space-y-2.5 my-0.5">
-                                  {/* Imagem responsiva */}
-                                  <div className="relative group overflow-hidden rounded-xl border border-border/80 bg-black/40 shadow-md">
-                                    <img
-                                      src={parsedImage.imageUrl}
-                                      alt="Imagem do lead"
-                                      loading="lazy"
-                                      className="max-h-[340px] w-auto max-w-full object-contain rounded-xl transition-transform duration-300 group-hover:scale-[1.01] cursor-pointer"
-                                      onClick={() => setModalImageUrl(parsedImage.imageUrl!)}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => setModalImageUrl(parsedImage.imageUrl!)}
-                                      className="absolute bottom-2.5 right-2.5 p-2 rounded-xl bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md hover:bg-black/80"
-                                      title="Expandir imagem"
-                                    >
-                                      <Maximize2 className="size-4" />
-                                    </button>
-                                  </div>
-
-                                  {/* Caixa da Descrição da IA */}
-                                  {parsedImage.description && (
-                                    <div className="rounded-xl bg-secondary/80 border border-border/70 p-3 space-y-1 backdrop-blur-sm">
-                                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-accent uppercase tracking-wider">
-                                        <Sparkles className="size-3.5" />
-                                        <span>Descrição da Imagem (IA)</span>
-                                      </div>
-                                      <p className="text-xs text-foreground/90 leading-relaxed font-medium">
-                                        {parsedImage.description}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <p className="pr-14 whitespace-pre-wrap break-words text-foreground font-medium">
-                                  {isMatch ? highlightText(m.text, msgSearchQuery) : m.text}
-                                </p>
-                              )}
-
-                              {/* Time + Status */}
-                              <span className="float-right -mb-1 ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
-                                {m.time}
-                                {m.me && <ReadIcon status={m.readStatus} />}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                <div className="flex flex-col gap-4 px-4 py-6 sm:px-8">
+                  {messages.length === 0 ? (
+                    <div className="omni-empty">
+                      <span className="omni-empty__art">
+                        <MessageCircle />
+                      </span>
+                      <h4>Nenhuma mensagem nesta conversa</h4>
+                      <p>Assim que o cliente responder pelo WhatsApp, o histórico aparece aqui.</p>
                     </div>
-                  ))}
+                  ) : (
+                    messageGroups.map((group, groupIdx) => (
+                      <div key={groupIdx} className="flex flex-col gap-3">
+                        <div className="flex justify-center py-1">
+                          <span className="omni-badge omni-badge--outline bg-surface">
+                            {group.dateLabel}
+                          </span>
+                        </div>
+
+                        {group.msgs.map((m) => {
+                          const i = messages.findIndex((msg) => msg.id === m.id);
+                          const isHighlighted =
+                            highlightIdx >= 0 && matchingIndices[highlightIdx] === i;
+                          const isMatch = matchingIndices.includes(i);
+                          const parsedImage = parseImageMessage(m.text);
+
+                          return (
+                            <div
+                              key={m.id}
+                              id={`msg-${i}`}
+                              className={cn("flex", m.me ? "justify-end" : "justify-start")}
+                            >
+                              <div
+                                className={cn(
+                                  "relative max-w-[85%] rounded-lg border p-3 text-sm leading-relaxed sm:max-w-[70%]",
+                                  m.me
+                                    ? "border-primary-soft bg-primary-soft"
+                                    : "border-line bg-surface",
+                                  isHighlighted && "border-focus shadow-md",
+                                )}
+                              >
+                                {m.attachment && (
+                                  <div className="mb-2.5 flex items-center gap-3 rounded-md border border-line bg-surface-2 p-2.5">
+                                    <span className="grid size-9 place-items-center rounded-sm bg-surface-3 text-ink-2">
+                                      {m.attachment.type === "image" ? (
+                                        <ImageIcon className="size-4" />
+                                      ) : m.attachment.type === "video" ? (
+                                        <Video className="size-4" />
+                                      ) : (
+                                        <FileText className="size-4" />
+                                      )}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-xs font-semibold text-ink">
+                                        {m.attachment.name}
+                                      </p>
+                                      <p className="num omni-small">{m.attachment.size}</p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {parsedImage.isImage && parsedImage.imageUrl ? (
+                                  <div className="flex flex-col gap-2.5">
+                                    <div className="group relative overflow-hidden rounded-md border border-line">
+                                      <img
+                                        src={parsedImage.imageUrl}
+                                        alt="Imagem enviada na conversa"
+                                        loading="lazy"
+                                        className="max-h-[340px] w-auto max-w-full cursor-pointer rounded-md object-contain"
+                                        onClick={() => setModalImageUrl(parsedImage.imageUrl!)}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setModalImageUrl(parsedImage.imageUrl!)}
+                                        className="omni-btn omni-btn--secondary omni-btn--icon omni-btn--sm absolute bottom-2.5 right-2.5"
+                                        title="Ampliar imagem"
+                                      >
+                                        <Maximize2 />
+                                        <span className="omni-sr">Ampliar imagem</span>
+                                      </button>
+                                    </div>
+
+                                    {parsedImage.description && (
+                                      <div className="omni-card omni-card--inset p-3">
+                                        <p className="omni-eyebrow flex items-center gap-1.5">
+                                          <Sparkles className="size-3" /> Descrição gerada pela IA
+                                        </p>
+                                        <p className="mt-1.5 text-sm leading-relaxed text-ink-2">
+                                          {parsedImage.description}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="whitespace-pre-wrap break-words pr-14 text-ink">
+                                    {isMatch ? highlightText(m.text, msgSearchQuery) : m.text}
+                                  </p>
+                                )}
+
+                                <span className="num float-right -mb-1 ml-2 mt-1 flex items-center gap-1 text-2xs text-ink-3">
+                                  {m.time}
+                                  {m.me && <ReadIcon status={m.readStatus} />}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))
+                  )}
 
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Scroll to Bottom Button */}
                 {showScrollBtn && (
                   <button
+                    type="button"
                     onClick={() => scrollToBottom("smooth")}
-                    className="absolute bottom-4 right-6 z-20 grid size-10 place-items-center rounded-full bg-card border border-border text-foreground shadow-xl transition-all hover:bg-accent hover:text-[#0d0d26]"
+                    className="omni-btn omni-btn--secondary omni-btn--icon absolute bottom-4 right-6 z-[var(--omni-z-sticky)] rounded-full shadow-md"
                   >
-                    <ArrowDown className="size-5" />
+                    <ArrowDown />
+                    <span className="omni-sr">Ir para a última mensagem</span>
                   </button>
                 )}
               </div>
             </>
           ) : (
-            /* EMPTY STATE WHEN NO CHAT IS SELECTED */
-            <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center bg-background p-8 text-center overflow-hidden">
-              {/* Background Glow */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
-              <div className="absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.03)_1px,transparent_1px)] dark:bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
-
-              <div className="relative z-10 flex flex-col items-center max-w-md space-y-4">
-                <div className="p-5 rounded-3xl bg-card border border-border backdrop-blur-2xl shadow-2xl text-accent">
-                  <MessagesSquare className="size-10" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-xl font-extrabold text-foreground tracking-tight">
-                    Central de Atendimentos Omni
-                  </h3>
-                  <p className="text-sm text-muted-foreground font-medium leading-relaxed">
-                    Selecione uma conversa na lista ao lado para visualizar o histórico de mensagens em tempo real.
-                  </p>
-                </div>
-                <div className="pt-2">
-                  <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                    </span>
-                    Central de Visualização Ativa
-                  </span>
-                </div>
+            <div className="flex min-w-0 flex-1 items-center justify-center bg-bg-subtle p-8">
+              <div className="omni-empty">
+                <span className="omni-empty__art">
+                  <MessagesSquare />
+                </span>
+                <h4>Escolha uma conversa</h4>
+                <p>
+                  Selecione um contato na lista ao lado para ver todo o histórico de mensagens
+                  trocadas com ele.
+                </p>
+                <p className="omni-status">
+                  <span className="omni-dot omni-dot--success omni-dot--pulse" />
+                  Central de visualização ativa
+                </p>
               </div>
             </div>
           )}
         </section>
 
-        {/* ══════ RIGHT: CONTACT INFO PANEL ══════ */}
+        {/* ══════ Dados do contato ══════ */}
         {showInfoPanel && chat && (
-          <section className="flex w-[320px] shrink-0 flex-col overflow-y-auto border-l border-border bg-card/90 backdrop-blur-2xl scrollbar-slim animate-in slide-in-from-right-4 fade-in-0 duration-200">
-            {/* Panel Header */}
-            <div className="flex items-center gap-3 border-b border-border px-4 py-3.5">
+          <section
+            className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l border-line bg-surface scrollbar-slim"
+            aria-label="Dados do contato"
+          >
+            <div className="flex items-center gap-3 border-b border-line px-4 py-3">
               <button
+                type="button"
                 onClick={() => setShowInfoPanel(false)}
-                className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
               >
-                <X className="size-4" />
+                <X />
+                <span className="omni-sr">Fechar painel</span>
               </button>
-              <p className="text-sm font-bold text-foreground">Informações do Contato</p>
+              <h2 className="omni-h5">Dados do contato</h2>
             </div>
 
-            {/* Avatar & Name */}
-            <div className="flex flex-col items-center border-b border-border px-4 py-6 text-center">
-              <span
-                className="grid size-20 place-items-center rounded-2xl text-2xl font-bold text-white shadow-xl border border-border"
-                style={{ backgroundColor: chat.avatarColor }}
-              >
+            <div className="flex flex-col items-center gap-2 border-b border-line px-4 py-6 text-center">
+              <span className="omni-avatar size-16 text-md" aria-hidden="true">
                 {getInitials(chat.name)}
               </span>
-              <p className="mt-3 text-base font-bold text-foreground">{chat.name}</p>
-              <p className="text-xs text-muted-foreground font-medium">{chat.company}</p>
-              <div className="mt-2 flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "size-2 rounded-full",
-                    chat.online ? "bg-emerald-500" : "bg-muted-foreground/30",
-                  )}
-                />
-                <span className="text-xs text-muted-foreground font-medium">
-                  {chat.online ? "Online agora" : "Offline"}
-                </span>
+              <div>
+                <p className="text-md font-semibold text-ink">{chat.name}</p>
+                <p className="omni-small">{chat.company}</p>
               </div>
+              <span className={cn("omni-badge", STATUS_BADGE[chat.status])}>{chat.status}</span>
             </div>
 
-            {/* Details */}
-            <div className="border-b border-border p-4 space-y-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Dados Cadastrais
-              </p>
-              <div className="space-y-3">
+            <div className="p-4">
+              <h3 className="omni-eyebrow mb-3">Dados cadastrais</h3>
+              <dl className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="grid size-8 place-items-center rounded-xl bg-secondary text-accent border border-border">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-surface-3 text-ink-2">
                     <Building2 className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Empresa</p>
-                    <p className="text-xs font-semibold text-foreground truncate">{chat.company}</p>
+                    <dt className="omni-small">Empresa</dt>
+                    <dd className="truncate text-sm font-medium text-ink">{chat.company}</dd>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="grid size-8 place-items-center rounded-xl bg-secondary text-accent border border-border">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-surface-3 text-ink-2">
                     <PhoneCall className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Telefone</p>
-                    <p className="text-xs font-semibold text-foreground truncate">{chat.phone || "Não informado"}</p>
+                    <dt className="omni-small">Telefone</dt>
+                    <dd className="num truncate text-sm font-medium text-ink">
+                      {chat.phone || "Não informado"}
+                    </dd>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="grid size-8 place-items-center rounded-xl bg-secondary text-accent border border-border">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-surface-3 text-ink-2">
                     <Mail className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Email</p>
-                    <p className="text-xs font-semibold text-foreground truncate">{chat.email || "Não informado"}</p>
+                    <dt className="omni-small">E-mail</dt>
+                    <dd className="truncate text-sm font-medium text-ink">
+                      {chat.email || "Não informado"}
+                    </dd>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="grid size-8 place-items-center rounded-xl bg-secondary text-accent border border-border">
-                    <MessageCircle className="size-4" />
+                  <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-surface-3 text-ink-2">
+                    <Bot className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Status</p>
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-accent/15 text-accent">
-                      {chat.status}
-                    </span>
+                    <dt className="omni-small">Atendimento por IA</dt>
+                    <dd>
+                      <span
+                        className={cn(
+                          "omni-badge",
+                          chat.ativo_ia ? "omni-badge--success" : "omni-badge--outline",
+                        )}
+                      >
+                        {chat.ativo_ia ? "Ativo" : "Inativo"}
+                      </span>
+                    </dd>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="grid size-8 place-items-center rounded-xl bg-secondary text-accent border border-border">
-                    <User className="size-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase">Automação IA</p>
-                    <span className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold",
-                      chat.ativo_ia ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"
-                    )}>
-                      {chat.ativo_ia ? "Ativa" : "Inativa"}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              </dl>
             </div>
-
           </section>
         )}
       </div>
 
-      {/* Modal Lightbox de Imagem */}
+      {/* Modal de imagem em tamanho real */}
       {modalImageUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 animate-in fade-in-0 duration-200">
-          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center">
-            {/* Fechar */}
-            <button
-              onClick={() => setModalImageUrl(null)}
-              className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors"
-              title="Fechar (Esc)"
-            >
-              <X className="size-6" />
-            </button>
-
-            {/* Imagem Zoom */}
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Imagem em tamanho real"
+        >
+          <div className="flex max-h-[90vh] w-auto max-w-5xl flex-col items-center gap-4">
             <img
               src={modalImageUrl}
-              alt="Imagem em tamanho real"
-              className="max-h-[80vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl border border-white/10"
+              alt="Imagem da conversa em tamanho real"
+              className="max-h-[76vh] w-auto max-w-full rounded-lg border border-line object-contain shadow-lg"
             />
 
-            {/* Botão de download / link original */}
-            <div className="mt-4 flex gap-3">
+            <div className="flex gap-2">
               <a
                 href={modalImageUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-[#0d0d26] font-bold text-xs shadow-lg hover:brightness-110 transition-all"
+                className="omni-btn omni-btn--secondary omni-btn--sm"
               >
-                <ExternalLink className="size-4" />
-                Abrir em Nova Aba
+                <ExternalLink /> Abrir em nova aba
               </a>
               <button
+                type="button"
                 onClick={() => setModalImageUrl(null)}
-                className="px-4 py-2 rounded-xl bg-white/10 text-white font-semibold text-xs hover:bg-white/20 transition-all"
+                className="omni-btn omni-btn--primary omni-btn--sm"
               >
                 Fechar
               </button>

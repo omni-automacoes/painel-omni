@@ -10,13 +10,11 @@ import {
   Settings,
   Calculator,
   Bell,
-  PanelLeftClose,
-  PanelLeft,
   LogOut,
   Sun,
   Moon,
-  ChevronRight,
-  ChevronLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -48,14 +46,16 @@ export function AppShell({
   children: ReactNode;
   flush?: boolean;
 }) {
-  /* Por padrão o menu sempre vem colapsado (recolhido) */
-  const [collapsed, setCollapsed] = useState(true);
+  /* Padrão do guia: menu lateral de 248px. O modo recolhido continua
+     disponível como estado secundário (trilho de ícones). */
+  const [collapsed, setCollapsed] = useState(false);
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
 
   const email = user?.email || "";
-  const name = user?.user_metadata?.full_name || user?.user_metadata?.name || email.split("@")[0] || "Usuário";
+  const name =
+    user?.user_metadata?.full_name || user?.user_metadata?.name || email.split("@")[0] || "Usuário";
   const initials = name
     .split(" ")
     .map((n: string) => n[0])
@@ -63,74 +63,64 @@ export function AppShell({
     .join("")
     .toUpperCase();
 
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
+  const isDark = theme === "dark";
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   return (
-    <div className="flex min-h-screen w-full bg-background text-foreground font-sans antialiased">
-      
-      {/* ══════ SIDEBAR ULTRA-MODERNA ══════ */}
+    <div className="flex min-h-screen w-full bg-bg font-sans text-ink antialiased">
+      {/* ───────────────────────── Menu lateral ───────────────────────── */}
       <aside
         className={cn(
-          "sticky top-0 z-30 flex h-screen shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out border-r border-sidebar-border backdrop-blur-2xl select-none",
-          collapsed ? "w-[78px]" : "w-[250px]",
+          "sticky top-0 z-[var(--omni-z-sticky)] flex h-screen shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-[var(--omni-dur-base)] ease-omni",
+          collapsed ? "w-[68px]" : "w-sidebar",
         )}
       >
-        {/* Header da Sidebar com a Logo Oficial Omni */}
-        <div className={cn("flex h-20 items-center border-b border-sidebar-border px-4 transition-all", collapsed ? "justify-center" : "justify-between px-5")}>
-          <Link to="/" className="flex items-center gap-3 group">
-            {collapsed ? (
-              <div className="p-2 rounded-2xl bg-white/5 border border-white/10 shadow-lg transition-transform group-hover:scale-105 flex items-center justify-center">
-                <img
-                  src="/LOGO%20OMNI%20(1).png"
-                  alt="Omni Logo"
-                  className="h-8 w-auto object-contain"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <img
-                  src="/LOGO%20OMNI%20(1).png"
-                  alt="Omni Logo"
-                  className="h-10 w-auto object-contain transition-all"
-                />
-              </div>
-            )}
+        <div
+          className={cn(
+            "flex h-topbar shrink-0 items-center border-b border-line",
+            collapsed ? "justify-center px-2" : "px-5",
+          )}
+        >
+          <Link
+            to="/"
+            className="flex items-center gap-3 rounded-md"
+            aria-label="Omni — ir para a visão geral"
+          >
+            <img
+              src="/LOGO%20OMNI%20(1).png"
+              alt="Omni"
+              className={cn("w-auto object-contain", collapsed ? "h-7" : "h-8")}
+            />
           </Link>
         </div>
 
-        {/* Links de Navegação */}
-        <nav className="mt-4 flex flex-1 flex-col gap-1.5 px-3 overflow-y-auto scrollbar-none">
+        <nav
+          className="omni-nav flex-1 gap-0.5 overflow-y-auto p-3 scrollbar-slim"
+          aria-label="Navegação principal"
+        >
           {NAV.map((item) => {
-            const active =
-              item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
             return (
               <Link
                 key={item.to}
                 to={item.to}
+                aria-current={active ? "page" : undefined}
+                title={collapsed ? item.label : undefined}
                 className={cn(
-                  "group relative flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-sm font-semibold transition-all duration-200",
-                  active
-                    ? "bg-accent/15 text-accent font-bold shadow-md shadow-accent/5 border-l-4 border-l-accent"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                  "group relative flex h-control items-center gap-3 rounded-md px-3 text-sm font-medium text-ink-2 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-surface-3 hover:text-ink",
+                  active &&
+                    "bg-primary-soft font-semibold text-primary-soft-fg hover:bg-primary-soft hover:text-primary-soft-fg",
                   collapsed && "justify-center px-0",
                 )}
               >
-                <item.icon
-                  className={cn(
-                    "size-5 shrink-0 transition-transform group-hover:scale-110",
-                    active ? "text-accent" : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground",
-                  )}
-                />
-
-                {!collapsed && (
-                  <span className="truncate tracking-tight">{item.label}</span>
+                <item.icon className={cn("size-4 shrink-0", !active && "opacity-75")} />
+                {collapsed ? (
+                  <span className="omni-sr">{item.label}</span>
+                ) : (
+                  <span className="truncate">{item.label}</span>
                 )}
-
-                {/* Tooltip quando estiver colapsado */}
                 {collapsed && (
-                  <span className="absolute left-16 z-50 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-bold text-foreground shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                  <span className="omni-tooltip pointer-events-none absolute left-[60px] whitespace-nowrap opacity-0 transition-opacity duration-[var(--omni-dur-fast)] group-hover:opacity-100">
                     {item.label}
                   </span>
                 )}
@@ -139,97 +129,86 @@ export function AppShell({
           })}
         </nav>
 
-        {/* Rodapé da Sidebar: Botão Sair & Botão Expandir/Recolher */}
-        <div className="p-3 border-t border-sidebar-border space-y-1">
-          {/* Botão Sair */}
+        <div className="shrink-0 border-t border-line p-3">
           <button
-            onClick={() => signOut()}
-            className={cn(
-              "group relative flex w-full items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-red-400/80 hover:text-red-400 hover:bg-red-500/10 transition-all",
-              collapsed && "justify-center px-0",
-            )}
-            title="Sair da conta"
-          >
-            <LogOut className="size-5 shrink-0 transition-transform group-hover:scale-110" />
-            {!collapsed && <span>Sair da conta</span>}
-            {collapsed && (
-              <span className="absolute left-16 z-50 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-bold text-red-400 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                Sair da conta
-              </span>
-            )}
-          </button>
-
-          {/* Botão Alternar Expansão */}
-          <button
+            type="button"
             onClick={() => setCollapsed((v) => !v)}
             className={cn(
-              "group relative flex w-full items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all",
+              "flex h-control w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-ink-3 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-surface-3 hover:text-ink",
               collapsed && "justify-center px-0",
             )}
-            title={collapsed ? "Expandir menu" : "Recolher menu"}
           >
             {collapsed ? (
-              <ChevronRight className="size-5 shrink-0 text-accent transition-transform group-hover:scale-110" />
+              <PanelLeftOpen className="size-4 shrink-0" />
             ) : (
-              <>
-                <ChevronLeft className="size-5 shrink-0 text-accent transition-transform group-hover:scale-110" />
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Recolher Menu</span>
-              </>
+              <PanelLeftClose className="size-4 shrink-0" />
             )}
-            {collapsed && (
-              <span className="absolute left-16 z-50 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-bold text-foreground shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                Expandir menu
-              </span>
+            <span className={cn(collapsed && "omni-sr")}>
+              {collapsed ? "Expandir menu" : "Recolher menu"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className={cn(
+              "flex h-control w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-ink-3 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-danger-soft hover:text-danger-fg",
+              collapsed && "justify-center px-0",
             )}
+          >
+            <LogOut className="size-4 shrink-0" />
+            <span className={cn(collapsed && "omni-sr")}>Sair da conta</span>
           </button>
         </div>
       </aside>
 
-      {/* Área Principal (Header + Conteúdo) */}
+      {/* ─────────────────────── Área principal ─────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-card/90 px-6 backdrop-blur-xl">
+        <header className="sticky top-0 z-[var(--omni-z-sticky)] flex h-topbar shrink-0 items-center gap-4 border-b border-line bg-surface px-5">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-extrabold tracking-tight text-foreground">
+            <h1 className="truncate text-md font-bold leading-tight tracking-snug text-ink">
               {title}
             </h1>
-            {subtitle && (
-              <p className="truncate text-xs text-muted-foreground font-medium">{subtitle}</p>
-            )}
+            {subtitle && <p className="truncate text-xs text-ink-3">{subtitle}</p>}
           </div>
+
           {actions}
 
-          {/* Theme Toggle Button */}
-          <button
-            onClick={toggleTheme}
-            className="relative grid size-9 place-items-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/10"
-            title={theme === "dark" ? "Alternar para Modo Claro" : "Alternar para Modo Escuro"}
-          >
-            {theme === "dark" ? (
-              <Sun className="size-4 text-[#fba834]" />
-            ) : (
-              <Moon className="size-4 text-foreground" />
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+              title={isDark ? "Usar tema claro" : "Usar tema escuro"}
+            >
+              {isDark ? <Sun /> : <Moon />}
+              <span className="omni-sr">{isDark ? "Usar tema claro" : "Usar tema escuro"}</span>
+            </button>
 
-          {/* Notifications Button */}
-          <button className="relative grid size-9 place-items-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground">
-            <Bell className="size-4" />
-            <span className="absolute right-2 top-2 size-2 rounded-full bg-accent animate-pulse" />
-          </button>
+            <button
+              type="button"
+              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+              title="Notificações"
+            >
+              <Bell />
+              <span className="omni-sr">Notificações</span>
+            </button>
+          </div>
 
-          {/* User Profile */}
-          <div className="flex items-center gap-3 border-l border-border pl-4">
+          <div className="flex items-center gap-3 border-l border-line pl-4">
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-bold leading-tight max-w-[150px] truncate text-foreground">{name}</p>
-              <p className="text-xs text-muted-foreground truncate max-w-[150px] font-medium">{email}</p>
+              <p className="max-w-[160px] truncate text-sm font-semibold leading-tight text-ink">
+                {name}
+              </p>
+              <p className="max-w-[160px] truncate text-xs text-ink-3">{email}</p>
             </div>
-            <span className="grid size-9 place-items-center rounded-2xl bg-gradient-to-r from-[#fba834] to-[#f7931e] text-sm font-extrabold text-[#0d0d26] shadow-md border border-white/20">
+            <span className="omni-avatar" aria-hidden="true">
               {initials}
             </span>
           </div>
         </header>
 
-        <main className={cn("min-w-0 flex-1", flush ? "" : "p-6")}>{children}</main>
+        <main className={cn("min-w-0 flex-1", flush ? "" : "p-5")}>{children}</main>
       </div>
     </div>
   );

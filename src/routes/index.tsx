@@ -1,38 +1,28 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import {
   DollarSign,
   TrendingUp,
-  Award,
   Users,
   Target,
   CheckCircle2,
   AlertTriangle,
   Clock,
   Plus,
-  ArrowUpRight,
-  Sparkles,
   Building2,
   CalendarDays,
   ExternalLink,
   Square,
-  FastForward,
   Kanban,
-  FileSpreadsheet,
-  ChevronRight,
-  MessageSquare,
-  Info,
 } from "lucide-react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -48,7 +38,8 @@ export const Route = createFileRoute("/")({
       { title: "Visão Geral · Omni Automações" },
       {
         name: "description",
-        content: "Painel executivo com vendas, clientes, tarefas e financeiro centralizados no Omni.",
+        content:
+          "Painel executivo com vendas, clientes, tarefas e financeiro centralizados no Omni.",
       },
     ],
   }),
@@ -56,6 +47,7 @@ export const Route = createFileRoute("/")({
 });
 
 /* ─── Funções Utilitárias ─── */
+
 function formatCurrency(val: number | string | null | undefined): string {
   const num = typeof val === "number" ? val : parseFloat(String(val || 0));
   return new Intl.NumberFormat("pt-BR", {
@@ -99,11 +91,50 @@ const ETAPAS_ORDENADAS = [
   "Venda Realizada",
 ];
 
+/* Painel flutuante de detalhamento de um KPI (aparece no hover do card). */
+
+function KpiPopover({
+  title,
+  icon,
+  count,
+  emptyText,
+  children,
+  align = "left",
+}: {
+  title: string;
+  icon: React.ReactNode;
+  count: string;
+  emptyText: string;
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  const isEmpty = Array.isArray(children) ? children.length === 0 : !children;
+  return (
+    <div
+      className={cn(
+        "omni-card omni-card--raised pointer-events-none absolute top-[calc(100%+8px)] z-[var(--omni-z-dropdown)] w-[320px] opacity-0 transition-opacity duration-[var(--omni-dur-fast)] ease-omni group-hover:pointer-events-auto group-hover:opacity-100",
+        align === "left" ? "left-0" : "right-0",
+      )}
+    >
+      <div className="omni-card__header py-3">
+        <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+          {icon}
+          {title}
+        </p>
+        <span className="omni-small shrink-0">{count}</span>
+      </div>
+      {isEmpty ? (
+        <p className="omni-small px-5 py-4">{emptyText}</p>
+      ) : (
+        <div className="omni-list max-h-56 overflow-y-auto scrollbar-slim">{children}</div>
+      )}
+    </div>
+  );
+}
+
 function DashboardOverview() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-
   const todayStr = todayISO();
 
   /* 1. Fetch Leads */
@@ -149,7 +180,7 @@ function DashboardOverview() {
   });
 
   /* 4. Fetch Tarefas */
-  const { data: tarefas = [] } = useQuery({
+  const { data: tarefas = [], isLoading: isLoadingTarefas } = useQuery({
     queryKey: ["overview_tarefas"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -165,7 +196,6 @@ function DashboardOverview() {
     },
     enabled: !!user,
   });
-
   /* Toggle Tarefa Status Mutation */
   const toggleTarefaMutation = useMutation({
     mutationFn: async (t: any) => {
@@ -193,25 +223,39 @@ function DashboardOverview() {
       const dt = r.data_recebimento || r.data_competencia || r.data_vencimento;
       return dt && dt.startsWith(currentMonthPrefix) && isReceitaPaga(r.status);
     });
-    const totalReceitaMes = receitasMes.reduce((acc: number, r: any) => acc + (Number(r.valor) || 0), 0);
-
+    const totalReceitaMes = receitasMes.reduce(
+      (acc: number, r: any) => acc + (Number(r.valor) || 0),
+      0,
+    );
     // 2. MRR Recorrente (APENAS clientes ATIVOS, nunca cancelados ou pausados)
     const clientesAtivos = clientes.filter((c: any) => (c.status || "").toLowerCase() === "ativo");
-    const clientesAtivosRecorrentes = clientesAtivos.filter((c: any) => (Number(c.valor_recorrente) || 0) > 0);
-    const mrrTotal = clientesAtivosRecorrentes.reduce((acc: number, c: any) => acc + (Number(c.valor_recorrente) || 0), 0);
-
+    const clientesAtivosRecorrentes = clientesAtivos.filter(
+      (c: any) => (Number(c.valor_recorrente) || 0) > 0,
+    );
+    const mrrTotal = clientesAtivosRecorrentes.reduce(
+      (acc: number, c: any) => acc + (Number(c.valor_recorrente) || 0),
+      0,
+    );
     // 3. Pipeline em aberto
-    const leadsAbertos = leads.filter((l: any) => l.lead_status === "Aberto" && l.lead_etapa_funil !== "Venda Realizada");
-    const pipelineAbertoValor = leadsAbertos.reduce((acc: number, l: any) => acc + (Number(l.lead_valor) || 0), 0);
-
+    const leadsAbertos = leads.filter(
+      (l: any) => l.lead_status === "Aberto" && l.lead_etapa_funil !== "Venda Realizada",
+    );
+    const pipelineAbertoValor = leadsAbertos.reduce(
+      (acc: number, l: any) => acc + (Number(l.lead_valor) || 0),
+      0,
+    );
     // 4. Taxa de Conversão
-    const totalGanhos = leads.filter((l: any) => l.lead_status === "Ganho" || l.lead_etapa_funil === "Venda Realizada").length;
+    const totalGanhos = leads.filter(
+      (l: any) => l.lead_status === "Ganho" || l.lead_etapa_funil === "Venda Realizada",
+    ).length;
     const taxaConversao = leads.length > 0 ? (totalGanhos / leads.length) * 100 : 0;
-
     // 5. Tarefas em atraso e vencendo hoje
-    const tarefasAtrasadas = tarefas.filter((t: any) => t.status !== "concluida" && t.data_vencimento && t.data_vencimento < todayStr);
-    const tarefasHoje = tarefas.filter((t: any) => t.status !== "concluida" && t.data_vencimento === todayStr);
-
+    const tarefasAtrasadas = tarefas.filter(
+      (t: any) => t.status !== "concluida" && t.data_vencimento && t.data_vencimento < todayStr,
+    );
+    const tarefasHoje = tarefas.filter(
+      (t: any) => t.status !== "concluida" && t.data_vencimento === todayStr,
+    );
     return {
       totalReceitaMes,
       receitasMesList: receitasMes,
@@ -240,8 +284,20 @@ function DashboardOverview() {
   /* ─── Gráfico Financeiro Mensal (Últimos 6 meses) ─── */
   const financialChartData = useMemo(() => {
     const monthsMap: Record<string, { m: string; realizado: number; previsto: number }> = {};
-    const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
+    const monthNames = [
+      "Jan",
+      "Fev",
+      "Mar",
+      "Abr",
+      "Mai",
+      "Jun",
+      "Jul",
+      "Ago",
+      "Set",
+      "Out",
+      "Nov",
+      "Dez",
+    ];
     const d = new Date();
     for (let i = 5; i >= 0; i--) {
       const targetDate = new Date(d.getFullYear(), d.getMonth() - i, 1);
@@ -249,7 +305,6 @@ function DashboardOverview() {
       const label = `${monthNames[targetDate.getMonth()]}/${String(targetDate.getFullYear()).slice(2)}`;
       monthsMap[key] = { m: label, realizado: 0, previsto: 0 };
     }
-
     receitas.forEach((r: any) => {
       const dt = r.data_recebimento || r.data_competencia || r.data_vencimento;
       if (!dt) return;
@@ -262,7 +317,6 @@ function DashboardOverview() {
         }
       }
     });
-
     return Object.values(monthsMap);
   }, [receitas]);
 
@@ -281,390 +335,370 @@ function DashboardOverview() {
   const recentLeads = useMemo(() => {
     return leads.slice(0, 5);
   }, [leads]);
-
+  const maxFunnelCount = Math.max(...funnelData.map((f) => f.count), 1);
   return (
     <AppShell
       title="Visão Geral"
-      subtitle="Painel executivo · Vendas, clientes, financeiro e operação em tempo real"
+      subtitle="Vendas, clientes, financeiro e operação em tempo real"
       actions={
-        <div className="flex items-center gap-2">
-          <Link
-            to="/negocios"
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all"
-          >
-            <Plus className="size-4" /> Novo Negócio
-          </Link>
-        </div>
+        <Link to="/negocios" className="omni-btn omni-btn--primary omni-btn--sm">
+          <Plus /> Novo negócio
+        </Link>
       }
     >
-      <div className="w-full space-y-6 pb-12">
-        {/* ══════ 1. KPIS EXECUTIVOS NO TOPO COM HOVER DETALHADO (ELEVADO z-50) ══════ */}
-        <div className="relative z-30 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          
-          {/* Card 1: Receita Paga do Mês */}
-          <div className="group relative z-10 hover:z-50 rounded-2xl border border-accent/40 bg-card/95 p-5 backdrop-blur-2xl shadow-xl space-y-2 hover:border-accent transition-all cursor-pointer">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-accent flex items-center gap-1.5">
-                <DollarSign className="size-4" /> Receita Paga (Mês)
+      <div className="omni-stack-6 w-full">
+        {/* ══════ 1. Indicadores do topo ══════ */}
+        <section className="omni-grid omni-grid-4" aria-label="Indicadores principais">
+          {/* Receita paga no mês */}
+          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <DollarSign className="size-3.5" /> Receita paga (mês)
               </span>
-              <span className="p-1.5 rounded-lg bg-accent/15 text-accent">
-                <TrendingUp className="size-4" />
-              </span>
+              <p className="omni-stat__value">{formatCurrency(metrics.totalReceitaMes)}</p>
+              <p className="omni-stat__foot">
+                {metrics.receitasMesList.length} entradas pagas neste mês
+              </p>
             </div>
-            <p className="text-3xl font-black text-accent">{formatCurrency(metrics.totalReceitaMes)}</p>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{metrics.receitasMesList.length} entradas pagas</span>
-              <span className="text-[10px] text-accent font-bold opacity-0 group-hover:opacity-100 transition-opacity">Ver detalhes ▾</span>
-            </div>
-
-            {/* ─── HOVER PREVIEW: Entradas que compõem este valor ─── */}
-            <div className="absolute left-0 top-[calc(100%+8px)] z-[100] w-84 rounded-2xl border border-accent/60 bg-[#0c0c24] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85)] opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
-                <p className="text-xs font-extrabold text-accent flex items-center gap-1.5">
-                  <Sparkles className="size-3.5" /> Lançamentos Pagos no Mês
-                </p>
-                <span className="text-[10px] text-muted-foreground font-semibold">{metrics.receitasMesList.length} itens</span>
-              </div>
-              {metrics.receitasMesList.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">Nenhuma receita paga registrada para este mês.</p>
-              ) : (
-                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {metrics.receitasMesList.map((r: any) => (
-                    <div key={r.receita_id} className="flex items-center justify-between text-xs border-b border-white/5 pb-1.5">
-                      <div className="min-w-0 pr-2">
-                        <p className="font-bold text-white truncate">{r.descricao}</p>
-                        <p className="text-[10px] text-muted-foreground">{formatDate(r.data_recebimento || r.data_vencimento)}</p>
-                      </div>
-                      <span className="font-black text-emerald-400 shrink-0">{formatCurrency(r.valor)}</span>
-                    </div>
-                  ))}
+            <KpiPopover
+              title="Lançamentos pagos no mês"
+              icon={<TrendingUp className="size-4 text-ink-3" />}
+              count={`${metrics.receitasMesList.length} itens`}
+              emptyText="Nenhuma receita paga registrada neste mês."
+            >
+              {metrics.receitasMesList.map((r: any) => (
+                <div key={r.receita_id} className="omni-list__item">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">{r.descricao}</p>
+                    <p className="omni-small">
+                      {formatDate(r.data_recebimento || r.data_vencimento)}
+                    </p>
+                  </div>
+                  <span className="num shrink-0 text-sm font-semibold text-ink">
+                    {formatCurrency(r.valor)}
+                  </span>
                 </div>
-              )}
+              ))}
+            </KpiPopover>
+          </div>
+          {/* MRR recorrente */}
+          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <Building2 className="size-3.5" /> MRR recorrente
+              </span>
+              <p className="omni-stat__value">
+                {formatCurrency(metrics.mrrTotal)}
+                <small>/mês</small>
+              </p>
+              <p className="omni-stat__foot">
+                {metrics.clientesRecorrentesList.length} clientes ativos com mensalidade
+              </p>
+            </div>
+            <KpiPopover
+              title="Clientes ativos e mensalidades"
+              icon={<Users className="size-4 text-ink-3" />}
+              count={`${metrics.clientesRecorrentesList.length} ativos`}
+              emptyText="Nenhum cliente ativo com mensalidade recorrente."
+            >
+              {metrics.clientesRecorrentesList.map((c: any) => (
+                <div key={c.cliente_id} className="omni-list__item">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">{c.nome}</p>
+                    {c.empresa && <p className="omni-small truncate">{c.empresa}</p>}
+                  </div>
+                  <span className="num shrink-0 text-sm font-semibold text-ink">
+                    {formatCurrency(c.valor_recorrente)}/mês
+                  </span>
+                </div>
+              ))}
+            </KpiPopover>
+          </div>
+          {/* Pipeline em aberto */}
+          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <Target className="size-3.5" /> Pipeline em aberto
+              </span>
+              <p className="omni-stat__value">{formatCurrency(metrics.pipelineAbertoValor)}</p>
+              <p className="omni-stat__foot">
+                {metrics.leadsAbertosCount} negociações em andamento
+              </p>
+            </div>
+            <KpiPopover
+              title="Negociações no funil"
+              icon={<Clock className="size-4 text-ink-3" />}
+              count={`${metrics.leadsAbertosCount} em aberto`}
+              emptyText="Nenhum negócio em aberto no momento."
+            >
+              {metrics.leadsAbertosList.map((l: any) => (
+                <div key={l.lead_id} className="omni-list__item">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">
+                      {l.lead_nome || l.lead_telefone || "Sem nome"}
+                    </p>
+                    <p className="omni-small truncate">{l.lead_etapa_funil || "Novo Lead"}</p>
+                  </div>
+                  <span className="num shrink-0 text-sm font-semibold text-ink">
+                    {formatCurrency(l.lead_valor)}
+                  </span>
+                </div>
+              ))}
+            </KpiPopover>
+          </div>
+          {/* Rotina comercial */}
+          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                {metrics.tarefasAtrasadasCount > 0 ? (
+                  <AlertTriangle className="size-3.5" />
+                ) : (
+                  <CheckCircle2 className="size-3.5" />
+                )}
+                Rotina comercial
+              </span>
+              <p
+                className={cn(
+                  "omni-stat__value",
+                  metrics.tarefasAtrasadasCount > 0 && "text-danger",
+                )}
+              >
+                {metrics.tarefasAtrasadasCount}
+                <small>atrasadas</small>
+              </p>
+              <p className="omni-stat__foot">
+                {metrics.tarefasAtrasadasCount > 0 ? (
+                  <span className="omni-badge omni-badge--danger">Ação necessária</span>
+                ) : (
+                  <span className="omni-badge omni-badge--success">Em dia</span>
+                )}
+                <span>{metrics.tarefasHojeCount} vencem hoje</span>
+              </p>
+            </div>
+            <KpiPopover
+              align="right"
+              title="Tarefas atrasadas e de hoje"
+              icon={<AlertTriangle className="size-4 text-ink-3" />}
+              count={`${metrics.tarefasUrgentesList.length} tarefas`}
+              emptyText="Nenhuma tarefa atrasada ou para hoje."
+            >
+              {metrics.tarefasUrgentesList.map((t: any) => {
+                const isAtrasada = t.data_vencimento && t.data_vencimento < todayStr;
+                return (
+                  <div key={t.tarefa_id} className="omni-list__item">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-ink">{t.titulo}</p>
+                      {t.lead_nome && <p className="omni-small truncate">{t.lead_nome}</p>}
+                    </div>
+                    <span
+                      className={cn(
+                        "omni-badge shrink-0",
+                        isAtrasada ? "omni-badge--danger" : "omni-badge--warning",
+                      )}
+                    >
+                      {isAtrasada ? "Atrasada" : "Hoje"}
+                    </span>
+                  </div>
+                );
+              })}
+            </KpiPopover>
+          </div>
+        </section>
+
+        {/* ══════ 2. Gráficos ══════ */}
+        <section className="grid gap-6 lg:grid-cols-3">
+          {/* Faturamento realizado vs. previsto */}
+          <div className="omni-card lg:col-span-2">
+            <div className="omni-card__header">
+              <div>
+                <h2 className="omni-h4">Faturamento realizado e previsto</h2>
+                <p className="omni-small mt-0.5">Últimos 6 meses, em reais</p>
+              </div>
+            </div>
+            <div className="omni-card__body">
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={financialChartData}
+                    margin={{ left: 4, right: 8, top: 8, bottom: 0 }}
+                    barGap={2}
+                  >
+                    <CartesianGrid
+                      stroke="var(--omni-chart-grid)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="m"
+                      stroke="var(--omni-chart-axis)"
+                      tick={{ fill: "var(--omni-text-3)", fontSize: 11 }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      stroke="var(--omni-chart-axis)"
+                      tick={{ fill: "var(--omni-text-3)", fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={56}
+                      tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)} mil`}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "var(--omni-surface-2)" }}
+                      contentStyle={{
+                        background: "var(--omni-surface)",
+                        border: "1px solid var(--omni-border)",
+                        borderRadius: "var(--omni-radius-md)",
+                        boxShadow: "var(--omni-shadow-md)",
+                        fontSize: "var(--omni-text-xs)",
+                        color: "var(--omni-text)",
+                      }}
+                      labelStyle={{ color: "var(--omni-text)", fontWeight: 700 }}
+                      formatter={(val: any, name: any) => [formatCurrency(val), name]}
+                    />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{
+                        fontSize: "var(--omni-text-xs)",
+                        color: "var(--omni-text-2)",
+                        paddingTop: 8,
+                      }}
+                    />
+                    <Bar
+                      dataKey="realizado"
+                      name="Realizado"
+                      fill="var(--omni-chart-1)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="previsto"
+                      name="Previsto"
+                      fill="var(--omni-chart-2)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
-
-          {/* Card 2: MRR Recorrente (Clientes Ativos) */}
-          <div className="group relative z-10 hover:z-50 rounded-2xl border border-blue-500/30 bg-card/95 p-5 backdrop-blur-2xl shadow-xl space-y-2 hover:border-blue-400 transition-all cursor-pointer">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
-                <Building2 className="size-4" /> MRR Recorrente
-              </span>
-              <span className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400">
-                <Users className="size-4" />
-              </span>
-            </div>
-            <p className="text-3xl font-black text-foreground">{formatCurrency(metrics.mrrTotal)}<span className="text-xs font-normal text-muted-foreground">/mês</span></p>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{metrics.clientesRecorrentesList.length} clientes ativos</span>
-              <span className="text-[10px] text-blue-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity">Ver clientes ▾</span>
-            </div>
-
-            {/* ─── HOVER PREVIEW: Clientes Recorrentes Ativos ─── */}
-            <div className="absolute left-0 top-[calc(100%+8px)] z-[100] w-84 rounded-2xl border border-blue-500/60 bg-[#0c0c24] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85)] opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
-                <p className="text-xs font-extrabold text-blue-400 flex items-center gap-1.5">
-                  <Users className="size-3.5" /> Clientes Ativos & Mensalidades
-                </p>
-                <span className="text-[10px] text-muted-foreground font-semibold">{metrics.clientesRecorrentesList.length} ativos</span>
+          {/* Funil comercial */}
+          <div className="omni-card flex flex-col">
+            <div className="omni-card__header">
+              <div>
+                <h2 className="omni-h4">Funil comercial</h2>
+                <p className="omni-small mt-0.5">{leads.length} leads no total</p>
               </div>
-              {metrics.clientesRecorrentesList.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">Nenhum cliente ativo com mensalidade recorrente.</p>
-              ) : (
-                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {metrics.clientesRecorrentesList.map((c: any) => (
-                    <div key={c.cliente_id} className="flex items-center justify-between text-xs border-b border-white/5 pb-1.5">
-                      <div className="min-w-0 pr-2">
-                        <p className="font-bold text-white truncate">{c.nome}</p>
-                        {c.empresa && <p className="text-[10px] text-muted-foreground truncate">{c.empresa}</p>}
-                      </div>
-                      <span className="font-black text-blue-400 shrink-0">{formatCurrency(c.valor_recorrente)}/mês</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Card 3: Pipeline Comercial Aberto */}
-          <div className="group relative z-10 hover:z-50 rounded-2xl border border-border bg-card/95 p-5 backdrop-blur-2xl shadow-xl space-y-2 hover:border-accent/60 transition-all cursor-pointer">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <Target className="size-4 text-accent" /> Pipeline em Aberto
-              </span>
-              <span className="p-1.5 rounded-lg bg-white/5 text-muted-foreground">
-                <Clock className="size-4" />
-              </span>
-            </div>
-            <p className="text-3xl font-black text-foreground">{formatCurrency(metrics.pipelineAbertoValor)}</p>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{metrics.leadsAbertosCount} negociações</span>
-              <span className="text-[10px] text-accent font-bold opacity-0 group-hover:opacity-100 transition-opacity">Ver negócios ▾</span>
-            </div>
-
-            {/* ─── HOVER PREVIEW: Negócios no Pipeline ─── */}
-            <div className="absolute left-0 top-[calc(100%+8px)] z-[100] w-84 rounded-2xl border border-accent/60 bg-[#0c0c24] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85)] opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
-                <p className="text-xs font-extrabold text-accent flex items-center gap-1.5">
-                  <Target className="size-3.5" /> Negociações no Funil
-                </p>
-                <span className="text-[10px] text-muted-foreground font-semibold">{metrics.leadsAbertosCount} em aberto</span>
-              </div>
-              {metrics.leadsAbertosList.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">Nenhum negócio em aberto.</p>
-              ) : (
-                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {metrics.leadsAbertosList.map((l: any) => (
-                    <div key={l.lead_id} className="flex items-center justify-between text-xs border-b border-white/5 pb-1.5">
-                      <div className="min-w-0 pr-2">
-                        <p className="font-bold text-white truncate">{l.lead_nome || l.lead_telefone || "Sem nome"}</p>
-                        <p className="text-[10px] text-accent truncate">{l.lead_etapa_funil || "Novo Lead"}</p>
-                      </div>
-                      <span className="font-black text-foreground shrink-0">{formatCurrency(l.lead_valor)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Card 4: Tarefas & Urgências */}
-          <div className={cn(
-            "group relative z-10 hover:z-50 rounded-2xl border p-5 backdrop-blur-2xl shadow-xl space-y-2 transition-all cursor-pointer",
-            metrics.tarefasAtrasadasCount > 0
-              ? "border-red-500/40 bg-gradient-to-br from-card to-red-500/10 hover:border-red-500"
-              : "border-border bg-card/95 hover:border-accent/40"
-          )}>
-            <div className="flex items-center justify-between">
-              <span className={cn(
-                "text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5",
-                metrics.tarefasAtrasadasCount > 0 ? "text-red-400" : "text-emerald-400"
-              )}>
-                {metrics.tarefasAtrasadasCount > 0 ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}
-                Rotina Comercial
-              </span>
-              <Link to="/tarefas" className="p-1 text-muted-foreground hover:text-foreground">
-                <ArrowUpRight className="size-4" />
+              <Link to="/negocios" className="omni-link shrink-0 text-xs">
+                Ver funil
               </Link>
             </div>
-            <div className="flex items-baseline gap-2">
-              <p className={cn("text-3xl font-black", metrics.tarefasAtrasadasCount > 0 ? "text-red-400" : "text-foreground")}>
-                {metrics.tarefasAtrasadasCount}
-              </p>
-              <span className="text-xs text-muted-foreground font-semibold">atrasadas · {metrics.tarefasHojeCount} hoje</span>
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Follow-ups pendentes</span>
-              <span className="text-[10px] text-red-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity">Ver tarefas ▾</span>
-            </div>
-
-            {/* ─── HOVER PREVIEW: Tarefas Urgentes ─── */}
-            <div className="absolute right-0 top-[calc(100%+8px)] z-[100] w-84 rounded-2xl border border-red-500/60 bg-[#0c0c24] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85)] opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2.5">
-                <p className="text-xs font-extrabold text-red-400 flex items-center gap-1.5">
-                  <AlertTriangle className="size-3.5" /> Tarefas Críticas / Hoje
-                </p>
-                <span className="text-[10px] text-muted-foreground font-semibold">{metrics.tarefasUrgentesList.length} tarefas</span>
-              </div>
-              {metrics.tarefasUrgentesList.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">Nenhuma tarefa atrasada ou para hoje!</p>
+            <div className="omni-card__body flex-1">
+              {isLoadingLeads ? (
+                <div className="flex flex-col gap-3">
+                  {ETAPAS_ORDENADAS.map((e) => (
+                    <div key={e} className="omni-skeleton h-8 w-full" />
+                  ))}
+                </div>
+              ) : leads.length === 0 ? (
+                <div className="omni-empty">
+                  <h4>Nenhum lead cadastrado</h4>
+                  <p>Cadastre o primeiro negócio para o funil começar a mostrar as etapas.</p>
+                </div>
               ) : (
-                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {metrics.tarefasUrgentesList.map((t: any) => {
-                    const isAtrasada = t.data_vencimento && t.data_vencimento < todayStr;
+                <div className="flex flex-col gap-3">
+                  {funnelData.map((f) => {
+                    const largura = (f.count / maxFunnelCount) * 100;
                     return (
-                      <div key={t.tarefa_id} className="flex items-center justify-between text-xs border-b border-white/5 pb-1.5">
-                        <div className="min-w-0 pr-2">
-                          <p className="font-bold text-white truncate">{t.titulo}</p>
-                          {t.lead_nome && <p className="text-[10px] text-accent truncate">{t.lead_nome}</p>}
+                      <div key={f.etapa} className="flex flex-col gap-1.5">
+                        <div className="flex items-baseline justify-between gap-3 text-xs">
+                          <span className="truncate font-medium text-ink-2">{f.etapa}</span>
+                          <span className="num shrink-0 font-semibold text-ink">{f.count}</span>
                         </div>
-                        <span className={cn("text-[10px] font-extrabold px-1.5 py-0.5 rounded", isAtrasada ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-[#fba834]")}>
-                          {isAtrasada ? "Atrasada" : "Hoje"}
-                        </span>
+                        <div className="omni-progress">
+                          <div
+                            className="omni-progress__bar"
+                            style={{ width: `${Math.max(largura, 2)}%` }}
+                          />
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
-          </div>
-
-        </div>
-
-        {/* ══════ 2. GRÁFICOS: EVOLUÇÃO FINANCEIRA & FUNIL DE VENDAS ══════ */}
-        <div className="relative z-10 grid gap-6 lg:grid-cols-3">
-          
-          {/* Gráfico 1: Desempenho Financeiro Mensal (2 Colunas) */}
-          <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-4 lg:col-span-2">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
-                  <TrendingUp className="size-4 text-accent" /> Evolução de Faturamento Realizado vs Previsto
-                </h3>
-                <p className="text-xs text-muted-foreground">Histórico financeiro dos últimos 6 meses</p>
-              </div>
-              <div className="flex items-center gap-3 text-xs font-semibold">
-                <span className="flex items-center gap-1 text-accent">
-                  <span className="size-2 rounded-full bg-accent" /> Realizado (Recebido)
-                </span>
-                <span className="flex items-center gap-1 text-slate-400">
-                  <span className="size-2 rounded-full bg-slate-400" /> Previsto
-                </span>
-              </div>
-            </div>
-
-            <div className="h-72 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={financialChartData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                  <XAxis dataKey="m" stroke="#94a3b8" fontSize={11} />
-                  <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#12122d",
-                      borderColor: "#fba83440",
-                      borderRadius: "12px",
-                      fontSize: "12px",
-                      color: "#fff",
-                    }}
-                    formatter={(val: any) => [formatCurrency(val), ""]}
-                  />
-                  <Bar dataKey="realizado" name="Realizado" fill="#fba834" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="previsto" name="Previsto" fill="#334155" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Gráfico 2: Mini Funil de Vendas (1 Coluna) */}
-          <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-4 lg:col-span-1 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <div>
-                  <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
-                    <Kanban className="size-4 text-accent" /> Funil Comercial
-                  </h3>
-                  <p className="text-xs text-muted-foreground">{leads.length} leads totais</p>
-                </div>
-                <Link to="/negocios" className="text-xs font-bold text-accent hover:underline flex items-center gap-0.5">
-                  Ver Funil <ChevronRight className="size-3" />
-                </Link>
-              </div>
-
-              <div className="space-y-2 pt-3">
-                {funnelData.map((f) => {
-                  const percent = leads.length > 0 ? (f.count / leads.length) * 100 : 0;
-                  const isWon = f.etapa === "Venda Realizada";
-
-                  return (
-                    <div key={f.etapa} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className={cn("text-[11px]", isWon ? "text-emerald-400 font-bold" : "text-muted-foreground")}>
-                          {f.etapa}
-                        </span>
-                        <span className={cn("text-[11px] font-extrabold", isWon ? "text-emerald-400" : "text-foreground")}>
-                          {f.count}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                        <div
-                          className={cn("h-full rounded-full transition-all", isWon ? "bg-emerald-400" : "bg-accent")}
-                          style={{ width: `${Math.max(percent, 4)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/80 bg-secondary/40 p-3 mt-4 text-xs flex items-center justify-between">
-              <span className="text-muted-foreground">Taxa de Conversão:</span>
-              <span className="font-extrabold text-emerald-400 text-sm">
-                {metrics.taxaConversao.toFixed(1)}%
+            <div className="omni-card__footer justify-between">
+              <span className="omni-small">Taxa de conversão</span>
+              <span className="num text-sm font-bold text-ink">
+                {metrics.taxaConversao.toFixed(1).replace(".", ",")}%
               </span>
             </div>
           </div>
+        </section>
 
-        </div>
-
-        {/* ══════ 3. TAREFAS PRIORITÁRIAS & ÚLTIMOS LEADS ══════ */}
-        <div className="relative z-10 grid gap-6 md:grid-cols-2">
-          
-          {/* Coluna Esquerda: Tarefas Prioritárias */}
-          <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+        {/* ══════ 3. Tarefas e oportunidades ══════ */}
+        <section className="grid gap-6 md:grid-cols-2">
+          {/* Tarefas urgentes */}
+          <div className="omni-card">
+            <div className="omni-card__header">
               <div>
-                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
-                  <CalendarDays className="size-4 text-accent" /> Tarefas & Atividades Urgentes
-                </h3>
-                <p className="text-xs text-muted-foreground">Pendências comerciais e follow-ups</p>
+                <h2 className="omni-h4 flex items-center gap-2">
+                  <CalendarDays className="size-4 text-ink-3" /> Tarefas urgentes
+                </h2>
+                <p className="omni-small mt-0.5">Pendências comerciais e follow-ups</p>
               </div>
-              <Link to="/tarefas" className="text-xs font-bold text-accent hover:underline flex items-center gap-0.5">
-                Ver Todas ({tarefas.length}) <ChevronRight className="size-3" />
+              <Link to="/tarefas" className="omni-link shrink-0 text-xs">
+                Ver todas ({tarefas.length})
               </Link>
             </div>
-
-            {urgentTasks.length === 0 ? (
-              <div className="py-12 text-center text-xs text-muted-foreground">
-                <CheckCircle2 className="size-8 mx-auto text-emerald-400/50 mb-2" />
-                Nenhuma tarefa pendente! Tudo em dia.
+            {isLoadingTarefas ? (
+              <div className="omni-card__body flex flex-col gap-2">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="omni-skeleton h-row w-full" />
+                ))}
+              </div>
+            ) : urgentTasks.length === 0 ? (
+              <div className="omni-empty">
+                <span className="omni-empty__art">
+                  <CheckCircle2 />
+                </span>
+                <h4>Nenhuma tarefa pendente</h4>
+                <p>Tudo em dia. Novas tarefas aparecem aqui assim que forem criadas.</p>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="omni-list">
                 {urgentTasks.map((t: any) => {
                   const isAtrasada = t.data_vencimento && t.data_vencimento < todayStr;
                   const isHoje = t.data_vencimento === todayStr;
-
                   return (
-                    <div
-                      key={t.tarefa_id}
-                      className={cn(
-                        "flex items-center justify-between gap-3 rounded-xl border p-3.5 transition-all group",
-                        isAtrasada
-                          ? "border-red-500/40 bg-red-500/[0.06] hover:bg-red-500/[0.10]"
-                          : isHoje
-                          ? "border-amber-500/40 bg-amber-500/[0.05] hover:bg-amber-500/[0.08]"
-                          : "border-border bg-secondary/30 hover:bg-secondary/60"
-                      )}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => toggleTarefaMutation.mutate(t)}
-                          className="text-muted-foreground hover:text-emerald-400 shrink-0"
-                          title="Concluir tarefa"
-                        >
-                          <Square className={cn("size-4", isAtrasada ? "text-red-400" : "")} />
-                        </button>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-foreground leading-snug truncate">
-                            {t.titulo}
-                          </p>
-                          {t.lead_id && (
-                            <Link
-                              to="/lead/$leadId"
-                              params={{ leadId: t.lead_id }}
-                              className="text-[11px] font-semibold text-accent hover:underline flex items-center gap-1 mt-0.5"
-                            >
-                              <ExternalLink className="size-2.5" /> {t.lead_nome || "Ver Lead"}
-                            </Link>
-                          )}
-                        </div>
+                    <div key={t.tarefa_id} className="omni-list__item">
+                      <button
+                        type="button"
+                        onClick={() => toggleTarefaMutation.mutate(t)}
+                        className="shrink-0 rounded-xs text-ink-faint transition-colors hover:text-success"
+                        title="Marcar como concluída"
+                      >
+                        <Square className="size-4" />
+                        <span className="omni-sr">Concluir tarefa {t.titulo}</span>
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-ink">{t.titulo}</p>
+                        {t.lead_id && (
+                          <Link
+                            to="/lead/$leadId"
+                            params={{ leadId: t.lead_id }}
+                            className="omni-link mt-0.5 inline-flex items-center gap-1 text-xs"
+                          >
+                            <ExternalLink className="size-3" /> {t.lead_nome || "Ver negócio"}
+                          </Link>
+                        )}
                       </div>
-
-                      <div className="shrink-0 text-right">
+                      <div className="shrink-0">
                         {isAtrasada ? (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-red-500/40 bg-red-500/20 px-2 py-0.5 text-[10px] font-extrabold text-red-400">
-                            Atrasada
-                          </span>
+                          <span className="omni-badge omni-badge--danger">Atrasada</span>
                         ) : isHoje ? (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/20 px-2 py-0.5 text-[10px] font-extrabold text-[#fba834]">
-                            Hoje
-                          </span>
+                          <span className="omni-badge omni-badge--warning">Vence hoje</span>
                         ) : (
-                          <span className="text-[11px] text-muted-foreground font-medium">
-                            {formatDate(t.data_vencimento)}
-                          </span>
+                          <span className="num omni-small">{formatDate(t.data_vencimento)}</span>
                         )}
                       </div>
                     </div>
@@ -673,61 +707,70 @@ function DashboardOverview() {
               </div>
             )}
           </div>
-
-          {/* Coluna Direita: Oportunidades Recentes */}
-          <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+          {/* Oportunidades recentes */}
+          <div className="omni-card">
+            <div className="omni-card__header">
               <div>
-                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
-                  <Users className="size-4 text-accent" /> Últimas Oportunidades & Leads
-                </h3>
-                <p className="text-xs text-muted-foreground">Novos contatos e negócios recentes</p>
+                <h2 className="omni-h4 flex items-center gap-2">
+                  <Kanban className="size-4 text-ink-3" /> Últimas oportunidades
+                </h2>
+                <p className="omni-small mt-0.5">Contatos e negócios mais recentes</p>
               </div>
-              <Link to="/negocios" className="text-xs font-bold text-accent hover:underline flex items-center gap-0.5">
-                Ver Todos <ChevronRight className="size-3" />
+              <Link to="/negocios" className="omni-link shrink-0 text-xs">
+                Ver todos
               </Link>
             </div>
-
-            <div className="space-y-2.5">
-              {recentLeads.map((lead: any) => {
-                const isGanho = lead.lead_status === "Ganho" || lead.lead_etapa_funil === "Venda Realizada";
-
-                return (
-                  <Link
-                    key={lead.lead_id}
-                    to="/lead/$leadId"
-                    params={{ leadId: lead.lead_id }}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/30 p-3.5 hover:border-accent/40 hover:bg-secondary/60 transition-all group"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-foreground group-hover:text-accent transition-colors">
-                        {lead.lead_nome || lead.lead_telefone || "Sem nome"}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                        <span>{lead.lead_origem || "Meta Ads"}</span>
-                        <span>·</span>
-                        <span>{formatDate(lead.criado_em)}</span>
+            {isLoadingLeads ? (
+              <div className="omni-card__body flex flex-col gap-2">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="omni-skeleton h-row w-full" />
+                ))}
+              </div>
+            ) : recentLeads.length === 0 ? (
+              <div className="omni-empty">
+                <h4>Nenhuma oportunidade ainda</h4>
+                <p>Cadastre um negócio para acompanhar as entradas mais recentes por aqui.</p>
+              </div>
+            ) : (
+              <div className="omni-list">
+                {recentLeads.map((lead: any) => {
+                  const isGanho =
+                    lead.lead_status === "Ganho" || lead.lead_etapa_funil === "Venda Realizada";
+                  return (
+                    <Link
+                      key={lead.lead_id}
+                      to="/lead/$leadId"
+                      params={{ leadId: lead.lead_id }}
+                      className="omni-list__item no-underline"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-ink">
+                          {lead.lead_nome || lead.lead_telefone || "Sem nome"}
+                        </p>
+                        <p className="omni-small truncate">
+                          {lead.lead_origem || "Meta Ads"} · {formatDate(lead.criado_em)}
+                        </p>
                       </div>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-xs font-extrabold text-accent">
-                        {formatCurrency(lead.lead_valor)}
-                      </p>
-                      <span className={cn(
-                        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.2 text-[9px] font-bold mt-0.5",
-                        isGanho ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-secondary text-muted-foreground"
-                      )}>
-                        {lead.lead_etapa_funil || "Novo Lead"}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="num text-sm font-semibold text-ink">
+                          {formatCurrency(lead.lead_valor)}
+                        </span>
+                        <span
+                          className={cn(
+                            "omni-badge",
+                            isGanho ? "omni-badge--success" : "omni-badge--outline",
+                          )}
+                        >
+                          {lead.lead_etapa_funil || "Novo Lead"}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
-
-        </div>
+        </section>
       </div>
     </AppShell>
   );

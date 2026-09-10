@@ -9,34 +9,23 @@ import {
   Bot,
   Calculator,
   History,
-  FileText,
   Clock,
-  DollarSign,
   HelpCircle,
   Cpu,
-  Layers,
   CheckCircle2,
   AlertCircle,
   AlertTriangle,
   Copy,
-  ChevronDown,
-  ChevronUp,
   RefreshCw,
-  Zap,
-  ArrowRight,
   ShieldCheck,
   Star,
-  Rocket,
   Check,
-  MessageSquare,
   Search,
   UserPlus,
   UserCheck,
   ExternalLink,
   X,
-  Link2,
   Unlink,
-  Filter,
   Percent,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -49,14 +38,16 @@ export const Route = createFileRoute("/orcamentos")({
       { title: "Orçamentos · Omni Automações" },
       {
         name: "description",
-        content: "Gerador inteligente de orçamentos com IA, cálculo de cenários e propostas comerciais.",
+        content:
+          "Gerador inteligente de orçamentos com IA, cálculo de cenários e propostas comerciais.",
       },
     ],
   }),
   component: OrcamentosPage,
 });
 
-const WEBHOOK_ORCAMENTOS = "https://n8n.omniautomacoes.com.br/webhook/731580fd-2c8f-4f9d-a16a-b35acd060e89";
+const WEBHOOK_ORCAMENTOS =
+  "https://n8n.omniautomacoes.com.br/webhook/731580fd-2c8f-4f9d-a16a-b35acd060e89";
 
 /* ─── Interfaces ─── */
 type CenarioOrcamento = {
@@ -123,6 +114,78 @@ function formatDate(dateStr?: string | null) {
   }
 }
 
+/* Cartão de um dos três cenários gerados pela IA. */
+function CenarioCard({
+  ordem,
+  titulo,
+  etiqueta,
+  destaque,
+  cenario,
+}: {
+  ordem: string;
+  titulo: string;
+  etiqueta: string;
+  destaque?: boolean;
+  cenario: CenarioOrcamento;
+}) {
+  return (
+    <div className={cn("omni-card relative flex flex-col", destaque && "border-primary shadow-md")}>
+      {destaque && (
+        <span className="omni-badge omni-badge--brand absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap">
+          <Star /> Recomendado
+        </span>
+      )}
+
+      <div className="omni-card__header">
+        <div>
+          <p className="omni-eyebrow">{ordem}</p>
+          <h3 className="omni-h4 mt-0.5">{titulo}</h3>
+        </div>
+        <span className="omni-badge omni-badge--outline">{etiqueta}</span>
+      </div>
+
+      <div className="omni-card__body flex flex-1 flex-col gap-4">
+        <dl className="omni-card omni-card--inset">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <dt className="text-sm text-ink-2">Setup</dt>
+            <dd className="num text-sm font-bold text-ink">{formatCurrency(cenario.setup)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-line-subtle px-4 py-3">
+            <dt className="text-sm text-ink-2">Mensalidade</dt>
+            <dd className="num text-sm font-bold text-ink">
+              {formatCurrency(cenario.mensalidade)}
+              <span className="text-xs font-normal text-ink-3">/mês</span>
+            </dd>
+          </div>
+          {cenario.horas_estimadas ? (
+            <div className="flex items-center justify-between gap-4 border-t border-line-subtle px-4 py-3">
+              <dt className="text-sm text-ink-2">Horas de desenvolvimento</dt>
+              <dd className="num text-sm font-bold text-ink">{cenario.horas_estimadas} h</dd>
+            </div>
+          ) : null}
+        </dl>
+
+        {cenario.stack_utilizada && cenario.stack_utilizada.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="omni-eyebrow">Stack</span>
+            <div className="flex flex-wrap gap-1.5">
+              {cenario.stack_utilizada.map((st, i) => (
+                <span key={i} className="omni-badge omni-badge--outline">
+                  {st}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p className="border-t border-line-subtle pt-3 text-sm leading-relaxed text-ink-2">
+          {cenario.descricao}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function OrcamentosPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -131,7 +194,7 @@ function OrcamentosPage() {
   const [margemLucro, setMargemLucro] = useState<number | "">("");
   const [selectedLeadIdForNew, setSelectedLeadIdForNew] = useState<string>("");
   const [activeOrcamento, setActiveOrcamento] = useState<OrcamentoRecord | null>(null);
-  
+
   /* Modal de Confirmação antes de Enviar */
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -167,12 +230,18 @@ function OrcamentosPage() {
   });
 
   /* 2. Fetch Histórico de Orçamentos do Supabase com Join de Leads */
-  const { data: orcamentos = [], isLoading: isLoadingHistory, isRefetching } = useQuery<OrcamentoRecord[]>({
+  const {
+    data: orcamentos = [],
+    isLoading: isLoadingHistory,
+    isRefetching,
+  } = useQuery<OrcamentoRecord[]>({
     queryKey: ["orcamentos_list"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orcamentos")
-        .select("*, leads (lead_id, lead_nome, lead_telefone, lead_email, lead_etapa_funil, lead_valor)")
+        .select(
+          "*, leads (lead_id, lead_nome, lead_telefone, lead_email, lead_etapa_funil, lead_valor)",
+        )
         .order("criado_em", { ascending: false });
 
       if (error) throw error;
@@ -183,7 +252,13 @@ function OrcamentosPage() {
 
   /* 3. Mutation para Atribuir ou Desvincular Lead */
   const assignLeadMutation = useMutation({
-    mutationFn: async ({ orcamentoId, leadId }: { orcamentoId: number | string; leadId: string | null }) => {
+    mutationFn: async ({
+      orcamentoId,
+      leadId,
+    }: {
+      orcamentoId: number | string;
+      leadId: string | null;
+    }) => {
       const { error } = await supabase
         .from("orcamentos")
         .update({ lead_id: leadId })
@@ -197,7 +272,9 @@ function OrcamentosPage() {
 
       if (activeOrcamento && String(activeOrcamento.orcamento_id) === String(orcamentoId)) {
         const foundLead = leads.find((l) => l.lead_id === leadId) || null;
-        setActiveOrcamento((prev) => (prev ? { ...prev, lead_id: leadId, leads: foundLead } : null));
+        setActiveOrcamento((prev) =>
+          prev ? { ...prev, lead_id: leadId, leads: foundLead } : null,
+        );
       }
 
       setModalAssignOrcamento(null);
@@ -247,7 +324,7 @@ function OrcamentosPage() {
       setActiveOrcamento((prev) =>
         prev && String(prev.orcamento_id) === String(orcamentoId)
           ? { ...prev, respostas_perguntas_comerciais: novasRespostas }
-          : prev
+          : prev,
       );
       toast.success("Resposta salva com sucesso!");
     },
@@ -261,7 +338,11 @@ function OrcamentosPage() {
     mutationFn: async (texto: string) => {
       const payload = {
         user_id: user?.id,
-        user_nome: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Usuário Omni",
+        user_nome:
+          user?.user_metadata?.full_name ||
+          user?.user_metadata?.name ||
+          user?.email?.split("@")[0] ||
+          "Usuário Omni",
         user_email: user?.email,
         solicitacao: texto.trim(),
         margem_lucro: Number(margemLucro),
@@ -278,12 +359,19 @@ function OrcamentosPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`O webhook retornou status ${response.status}. Verifique a automação no n8n.`);
+        throw new Error(
+          `O webhook retornou status ${response.status}. Verifique a automação no n8n.`,
+        );
       }
 
       // Processar a resposta do Webhook
       const responseData = await response.json();
-      return { responseData, solicitacaoOriginal: texto.trim(), leadId: selectedLeadIdForNew || null, margem: Number(margemLucro) };
+      return {
+        responseData,
+        solicitacaoOriginal: texto.trim(),
+        leadId: selectedLeadIdForNew || null,
+        margem: Number(margemLucro),
+      };
     },
     onMutate: () => {
       // Iniciar timer de espera
@@ -334,7 +422,9 @@ function OrcamentosPage() {
             lead_id: newRecord.lead_id,
             margem_lucro: newRecord.margem_lucro,
           })
-          .select("*, leads (lead_id, lead_nome, lead_telefone, lead_email, lead_etapa_funil, lead_valor)")
+          .select(
+            "*, leads (lead_id, lead_nome, lead_telefone, lead_email, lead_etapa_funil, lead_valor)",
+          )
           .single();
 
         if (!insertErr && inserted) {
@@ -385,7 +475,9 @@ function OrcamentosPage() {
       Number(margemLucro) < 0 ||
       Number(margemLucro) > 100
     ) {
-      toast.warning("Por favor, especifique a margem de lucro entre 0% e 100% antes de prosseguir.");
+      toast.warning(
+        "Por favor, especifique a margem de lucro entre 0% e 100% antes de prosseguir.",
+      );
       return;
     }
 
@@ -408,27 +500,27 @@ function OrcamentosPage() {
   const getProgressStatus = (seconds: number) => {
     if (seconds < 18) {
       return {
-        title: "Interpretando escopo e requisitos...",
-        desc: "O modelo de IA está mapeando os fluxos, canais e integrações necessárias.",
+        title: "Interpretando escopo e requisitos",
+        desc: "O modelo está mapeando os fluxos, canais e integrações necessárias.",
         percent: Math.min(Math.round((seconds / 90) * 100), 25),
       };
     }
     if (seconds < 40) {
       return {
-        title: "Dimensionando arquitetura técnica...",
+        title: "Dimensionando a arquitetura técnica",
         desc: "Avaliando custos de APIs, ferramentas (n8n, Supabase, WhatsApp) e volumetria.",
         percent: Math.min(Math.round((seconds / 90) * 100), 55),
       };
     }
     if (seconds < 70) {
       return {
-        title: "Calculando cenários Mínimo, Ideal e Máximo...",
+        title: "Calculando os cenários mínimo, ideal e máximo",
         desc: "Estimando horas de desenvolvimento, setup e custos com base na margem de lucro.",
         percent: Math.min(Math.round((seconds / 90) * 100), 80),
       };
     }
     return {
-      title: "Formatando proposta e perguntas comerciais...",
+      title: "Formatando a proposta e as perguntas comerciais",
       desc: "Finalizando o parecer técnico e preparando as perguntas estratégicas.",
       percent: Math.min(Math.round((seconds / 90) * 100), 98),
     };
@@ -448,7 +540,7 @@ function OrcamentosPage() {
       text += `*Margem de Lucro Aplicada:* ${orc.margem_lucro}%\n`;
     }
     text += `*Projeto:* ${orc.solicitacao_original}\n\n`;
-    
+
     if (orc.raciocinio_tecnico) {
       text += `*Raciocínio Técnico:*\n${orc.raciocinio_tecnico}\n\n`;
     }
@@ -527,7 +619,7 @@ function OrcamentosPage() {
       (l) =>
         l.lead_nome?.toLowerCase().includes(term) ||
         l.lead_telefone?.toLowerCase().includes(term) ||
-        l.lead_email?.toLowerCase().includes(term)
+        l.lead_email?.toLowerCase().includes(term),
     );
   }, [leads, leadModalSearch]);
 
@@ -542,18 +634,18 @@ function OrcamentosPage() {
 
   return (
     <AppShell
-      title="Gerador de Orçamentos IA"
-      subtitle="Dimensionamento técnico, esforço em horas e precificação em 3 cenários automáticos"
+      title="Orçamentos"
+      subtitle="Dimensionamento técnico, esforço em horas e preço em três cenários"
       actions={
         <div className="flex items-center gap-2">
           {unassignedCount > 0 && (
             <button
               type="button"
               onClick={() => setStatusFilter("sem_lead")}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-extrabold text-amber-400 hover:bg-amber-500/25 transition-all animate-pulse"
+              className="omni-btn omni-btn--secondary omni-btn--sm"
             >
-              <AlertTriangle className="size-3.5" />
-              {unassignedCount} {unassignedCount === 1 ? "orçamento sem lead" : "orçamentos sem lead"}
+              <AlertTriangle />
+              {unassignedCount} sem negócio
             </button>
           )}
 
@@ -561,648 +653,472 @@ function OrcamentosPage() {
             type="button"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["orcamentos_list"] })}
             disabled={isRefetching}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-secondary/60 px-3.5 py-2 text-xs font-bold text-foreground hover:bg-secondary transition-all"
+            className="omni-btn omni-btn--secondary omni-btn--sm"
             title="Atualizar lista"
           >
-            <RefreshCw className={cn("size-3.5", isRefetching && "animate-spin text-accent")} />
+            <RefreshCw className={cn(isRefetching && "animate-spin")} />
             Atualizar
           </button>
         </div>
       }
     >
-      <div className="w-full space-y-8 pb-16">
-        
-        {/* ══════ 1. SESSÃO DO INPUT DE CHAT (PROMPT DO PROJETO) ══════ */}
-        <section className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-[#12122d]/95 via-[#161638]/90 to-[#0d0d26]/95 p-6 backdrop-blur-2xl shadow-2xl space-y-4">
-          {/* Ambient Glow */}
-          <div className="pointer-events-none absolute -right-20 -top-20 size-72 rounded-full bg-[#fba834]/15 blur-3xl" />
+      <div className="omni-stack-6 w-full">
+        {/* ══════ 1. Solicitar orçamento ══════ */}
 
-          <div className="flex flex-wrap items-center justify-between gap-4 relative z-10">
-            <div className="flex items-center gap-2.5">
-              <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-[#fba834] to-[#f7931e] text-[#0d0d26] shadow-md shadow-[#fba834]/20 font-black">
-                <Sparkles className="size-5" />
-              </span>
-              <div>
-                <h2 className="text-base font-extrabold text-foreground">Solicitar Novo Orçamento com IA</h2>
-                <p className="text-xs text-muted-foreground">
-                  Descreva o projeto, especifique a margem de lucro e selecione o lead para gerar os 3 cenários.
-                </p>
-              </div>
-            </div>
-
-            {/* Seletor Opcional de Lead no Envio */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-300 flex items-center gap-1">
-                <UserCheck className="size-3.5 text-accent" /> Vincular a Lead:
-              </span>
-              <select
-                value={selectedLeadIdForNew}
-                onChange={(e) => setSelectedLeadIdForNew(e.target.value)}
-                className="rounded-xl border border-white/10 bg-[#12122d] px-3 py-1.5 text-xs text-foreground outline-none focus:border-accent/60 font-semibold cursor-pointer max-w-[200px] truncate"
-                disabled={sendOrcamentoMutation.isPending}
-              >
-                <option value="">Nenhum (Atribuir depois)</option>
-                {leads.map((l) => (
-                  <option key={l.lead_id} value={l.lead_id}>
-                    {l.lead_nome || l.lead_telefone || "Sem nome"} {l.lead_etapa_funil ? `(${l.lead_etapa_funil})` : ""}
-                  </option>
-                ))}
-              </select>
+        <section className="omni-card">
+          <div className="omni-card__header">
+            <div>
+              <h2 className="omni-h4 flex items-center gap-2">
+                <Sparkles className="size-4 text-ink-3" /> Solicitar novo orçamento
+              </h2>
+              <p className="omni-small mt-0.5">
+                Descreva o projeto, informe a margem e vincule o negócio para gerar os três
+                cenários.
+              </p>
             </div>
           </div>
 
-          {/* Área de Texto do Chat */}
-          <div className="relative z-10 space-y-3">
-            <div className={cn(
-              "relative rounded-2xl border bg-white/5 p-3.5 transition-all space-y-3",
-              sendOrcamentoMutation.isPending ? "border-amber-500/50 opacity-60 pointer-events-none" : "border-white/10 focus-within:border-accent/70"
-            )}>
-              {/* Campo de Texto da Solicitação */}
+          <div className="omni-card__body omni-stack">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="orc-prompt">
+                Escopo do projeto <span className="omni-req">*</span>
+              </label>
               <textarea
+                id="orc-prompt"
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={4}
-                placeholder="Descreva detalhadamente o projeto... Ex: 'Preciso de um fluxo no n8n para disparo em massa de cupons para 3.000 leads via WhatsApp e um dashboard com métricas de conversão e lucro...'"
-                className="w-full bg-transparent px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none resize-none font-medium leading-relaxed"
+                placeholder="Ex.: fluxo no n8n para disparo de cupons a 3.000 leads no WhatsApp, com painel de conversão."
+                className="omni-textarea"
                 disabled={sendOrcamentoMutation.isPending}
               />
+              <p className="omni-hint">Enter envia; Shift + Enter quebra a linha.</p>
+            </div>
 
-              {/* ══════ CAMPO OBRIGATÓRIO DE MARGEM DE LUCRO (0% A 100%) ══════ */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-                    <Percent className="size-3.5 text-accent" />
-                    <span>Margem de Lucro:</span>
-                    <span className="text-red-400 font-black">*</span>
-                  </div>
-
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={margemLucro}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "") {
-                          setMargemLucro("");
-                        } else {
-                          const num = Math.min(100, Math.max(0, Number(val)));
-                          setMargemLucro(num);
-                        }
-                      }}
-                      placeholder="0 a 100"
-                      className="w-24 rounded-xl border border-accent/40 bg-[#12122d] px-3 py-1.5 text-xs font-black text-accent outline-none focus:border-accent text-center placeholder:text-muted-foreground/50 placeholder:font-normal"
-                      disabled={sendOrcamentoMutation.isPending}
-                      required
-                    />
-                    <span className="absolute right-3 text-xs font-bold text-accent pointer-events-none">%</span>
-                  </div>
-
-                  {/* Botões Rápidos de Margem */}
-                  <div className="flex items-center gap-1">
-                    {[20, 30, 40, 50, 70, 100].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setMargemLucro(preset)}
-                        className={cn(
-                          "rounded-lg px-2 py-0.5 text-[10px] font-bold transition-all",
-                          margemLucro === preset
-                            ? "bg-accent text-[#0d0d26] shadow-sm font-black"
-                            : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
-                        )}
-                      >
-                        {preset}%
-                      </button>
-                    ))}
-                  </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="orc-margem">
+                  Margem de lucro (%) <span className="omni-req">*</span>
+                </label>
+                <div className="omni-input-group">
+                  <Percent />
+                  <input
+                    id="orc-margem"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={margemLucro}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "") {
+                        setMargemLucro("");
+                      } else {
+                        const num = Math.min(100, Math.max(0, Number(val)));
+                        setMargemLucro(num);
+                      }
+                    }}
+                    placeholder="0 a 100"
+                    className="omni-input num"
+                    disabled={sendOrcamentoMutation.isPending}
+                    required
+                  />
                 </div>
+                <div className="omni-btn-group" role="group" aria-label="Margens sugeridas">
+                  {[20, 30, 40, 50, 70, 100].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      aria-pressed={margemLucro === preset}
+                      onClick={() => setMargemLucro(preset)}
+                      className="omni-btn omni-btn--secondary omni-btn--sm"
+                    >
+                      {preset}%
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={handlePreSend}
-                  disabled={sendOrcamentoMutation.isPending || !promptText.trim() || margemLucro === ""}
-                  className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-6 py-2.5 text-xs font-bold text-[#0d0d26] shadow-lg shadow-[#fba834]/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
+              <div className="omni-field">
+                <label className="omni-label" htmlFor="orc-lead">
+                  Negócio vinculado
+                </label>
+                <select
+                  id="orc-lead"
+                  value={selectedLeadIdForNew}
+                  onChange={(e) => setSelectedLeadIdForNew(e.target.value)}
+                  className="omni-select"
+                  disabled={sendOrcamentoMutation.isPending}
                 >
-                  {sendOrcamentoMutation.isPending ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" />
-                      Processando com IA...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="size-4" />
-                      Gerar Orçamento
-                    </>
-                  )}
-                </button>
+                  <option value="">Nenhum — atribuir depois</option>
+                  {leads.map((l) => (
+                    <option key={l.lead_id} value={l.lead_id}>
+                      {l.lead_nome || l.lead_telefone || "Sem nome"}{" "}
+                      {l.lead_etapa_funil ? `(${l.lead_etapa_funil})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="omni-hint">
+                  Sem vínculo, o orçamento entra no histórico marcado como pendente.
+                </p>
               </div>
             </div>
 
-            {/* Sugestões Rápidas de Prompt */}
             {!sendOrcamentoMutation.isPending && (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-[11px] font-bold text-muted-foreground">Exemplos rápidos:</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="omni-small">Exemplos:</span>
                 {promptSuggestions.map((sug, i) => (
                   <button
                     key={i}
                     type="button"
                     onClick={() => setPromptText(sug)}
-                    className="rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1 text-[10px] text-slate-300 hover:border-accent/40 hover:bg-accent/10 hover:text-accent transition-all text-left truncate max-w-xs"
+                    className="omni-btn omni-btn--quiet omni-btn--sm max-w-xs"
                     title={sug}
                   >
-                    "{sug}"
+                    <span className="block min-w-0 truncate">{sug}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
+
+          <div className="omni-card__footer">
+            <button
+              type="button"
+              onClick={handlePreSend}
+              disabled={sendOrcamentoMutation.isPending || !promptText.trim() || margemLucro === ""}
+              data-loading={sendOrcamentoMutation.isPending ? "true" : undefined}
+              className="omni-btn omni-btn--primary"
+            >
+              <Send /> Gerar orçamento
+            </button>
+          </div>
         </section>
 
-        {/* ══════ 2. TELA DE CARREGAMENTO EM TEMPO REAL (~2 MINUTOS) ══════ */}
+        {/* ══════ 2. Processando ══════ */}
+
         {sendOrcamentoMutation.isPending && (
-          <section className="rounded-2xl border border-amber-500/40 bg-gradient-to-b from-[#161638]/95 to-[#0e0e28]/95 p-8 backdrop-blur-2xl shadow-2xl text-center space-y-6 animate-in fade-in duration-300">
-            <div className="relative mx-auto size-20">
-              <div className="absolute inset-0 rounded-full border-4 border-amber-500/20 animate-ping" />
-              <div className="absolute inset-0 rounded-full border-4 border-t-amber-400 border-r-transparent border-b-amber-400 border-l-transparent animate-spin" />
-              <div className="grid size-20 place-items-center rounded-full bg-secondary/80 backdrop-blur-md">
-                <Bot className="size-9 text-amber-400 animate-pulse" />
-              </div>
-            </div>
-
-            <div className="space-y-2 max-w-lg mx-auto">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-extrabold text-amber-400">
-                <Sparkles className="size-3.5" /> IA Omni Analisando Projeto
+          <section className="omni-card">
+            <div className="omni-card__body flex flex-col items-center gap-5 py-10 text-center">
+              <span className="grid size-14 place-items-center rounded-full bg-primary-soft text-primary-soft-fg">
+                <Bot className="size-7" />
               </span>
-              <h3 className="text-lg font-black text-foreground">
-                {currentLoadingStatus.title}
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {currentLoadingStatus.desc}
-              </p>
-              <p className="text-[11px] text-amber-400/80 font-medium">
-                Tempo decorrido: <span className="font-mono font-bold text-white">{Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, "0")}</span> (tempo médio: ~1 a 2 minutos)
-              </p>
-            </div>
 
-            {/* Barra de Progresso Estimada */}
-            <div className="max-w-md mx-auto space-y-1.5">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary border border-white/5">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-[#fba834] rounded-full transition-all duration-500"
-                  style={{ width: `${currentLoadingStatus.percent}%` }}
-                />
+              <div className="flex max-w-lg flex-col gap-2">
+                <p className="omni-eyebrow">IA analisando o projeto</p>
+                <h2 className="omni-h3">{currentLoadingStatus.title}</h2>
+                <p className="omni-p mx-auto">{currentLoadingStatus.desc}</p>
               </div>
-              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Margem aplicada: {margemLucro}%</span>
-                <span>Aguardando resposta do n8n...</span>
+
+              <div className="w-full max-w-md">
+                <div
+                  className="omni-progress"
+                  role="progressbar"
+                  aria-valuenow={currentLoadingStatus.percent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className="omni-progress__bar"
+                    style={{ width: `${currentLoadingStatus.percent}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs text-ink-3">
+                  <span className="num">
+                    {Math.floor(elapsedSeconds / 60)}:
+                    {(elapsedSeconds % 60).toString().padStart(2, "0")} decorridos
+                  </span>
+                  <span className="num">Margem de {margemLucro}% · leva 1 a 2 minutos</span>
+                </div>
               </div>
             </div>
           </section>
         )}
 
-        {/* ══════ 3. EXIBIÇÃO VISUAL DO ORÇAMENTO GERADO / SELECIONADO ══════ */}
-        {activeOrcamento && !sendOrcamentoMutation.isPending && (
-          <section className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
-            
-            {/* Header do Orçamento Ativo */}
-            <div className={cn(
-              "rounded-2xl border p-6 backdrop-blur-2xl shadow-xl flex flex-wrap items-center justify-between gap-4 transition-all",
-              !activeOrcamento.lead_id
-                ? "border-amber-500/50 bg-gradient-to-br from-[#12122d] to-amber-500/[0.08]"
-                : "border-emerald-500/40 bg-gradient-to-br from-[#12122d] to-[#0f241a]/40"
-            )}>
-              <div className="space-y-2 flex-1 min-w-[280px]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-black text-emerald-400">
-                    <CheckCircle2 className="size-3.5" /> Orçamento Gerado
-                  </span>
-                  {activeOrcamento.orcamento_id && (
-                    <span className="text-xs font-mono font-bold text-accent">
-                      #ORC-{activeOrcamento.orcamento_id}
-                    </span>
-                  )}
-                  {activeOrcamento.margem_lucro !== null && activeOrcamento.margem_lucro !== undefined && (
-                    <span className="rounded-md border border-purple-500/40 bg-purple-500/15 px-2 py-0.5 text-[11px] font-black text-purple-300">
-                      Margem: {activeOrcamento.margem_lucro}%
-                    </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    · {formatDate(activeOrcamento.criado_em)}
-                  </span>
+        {/* ══════ 3. Orçamento ativo ══════ */}
 
-                  {/* ALERTA OU BADGE DE LEAD VINCULADO */}
-                  {!activeOrcamento.lead_id ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/20 px-2.5 py-0.5 text-[11px] font-black text-amber-300 animate-pulse">
-                      <AlertTriangle className="size-3.5 text-amber-400" />
-                      ALERTA: Sem Lead Atribuído
+        {activeOrcamento && !sendOrcamentoMutation.isPending && (
+          <section className="omni-stack-6">
+            <div className="omni-card">
+              <div className="omni-card__body flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-[280px] flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="omni-badge omni-badge--success">
+                      <CheckCircle2 /> Orçamento gerado
                     </span>
-                  ) : (
-                    <Link
-                      to="/lead/$leadId"
-                      params={{ leadId: activeOrcamento.lead_id }}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/15 px-2.5 py-0.5 text-[11px] font-bold text-accent hover:underline"
-                    >
-                      <UserCheck className="size-3.5" /> Lead: {activeOrcamento.leads?.lead_nome || "Ver Lead"}
-                      <ExternalLink className="size-3" />
-                    </Link>
-                  )}
+                    {activeOrcamento.orcamento_id && (
+                      <span className="omni-code">ORC-{activeOrcamento.orcamento_id}</span>
+                    )}
+                    {activeOrcamento.margem_lucro !== null &&
+                      activeOrcamento.margem_lucro !== undefined && (
+                        <span className="omni-badge omni-badge--brand">
+                          Margem {activeOrcamento.margem_lucro}%
+                        </span>
+                      )}
+                    <span className="num omni-small">{formatDate(activeOrcamento.criado_em)}</span>
+
+                    {!activeOrcamento.lead_id ? (
+                      <span className="omni-badge omni-badge--warning">
+                        <AlertTriangle /> Sem negócio vinculado
+                      </span>
+                    ) : (
+                      <Link
+                        to="/lead/$leadId"
+                        params={{ leadId: activeOrcamento.lead_id }}
+                        className="omni-link inline-flex items-center gap-1.5"
+                      >
+                        <UserCheck className="size-3.5" />
+                        {activeOrcamento.leads?.lead_nome || "Ver negócio"}
+                        <ExternalLink className="size-3" />
+                      </Link>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-ink">
+                    {activeOrcamento.solicitacao_original}
+                  </p>
                 </div>
 
-                <h3 className="text-sm font-bold text-foreground">
-                  "{activeOrcamento.solicitacao_original}"
-                </h3>
-              </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {activeOrcamento.orcamento_id && (
+                    <button
+                      type="button"
+                      onClick={() => setModalAssignOrcamento(activeOrcamento)}
+                      className="omni-btn omni-btn--secondary omni-btn--sm"
+                    >
+                      <UserPlus />
+                      {!activeOrcamento.lead_id ? "Vincular negócio" : "Trocar negócio"}
+                    </button>
+                  )}
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                {/* Botão de Atribuir / Trocar Lead */}
-                {activeOrcamento.orcamento_id && (
                   <button
                     type="button"
-                    onClick={() => setModalAssignOrcamento(activeOrcamento)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all",
-                      !activeOrcamento.lead_id
-                        ? "border border-amber-500/60 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 shadow-md shadow-amber-500/10"
-                        : "border border-white/10 bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                    )}
+                    onClick={() => copyFormattedProposal(activeOrcamento)}
+                    className="omni-btn omni-btn--secondary omni-btn--sm"
                   >
-                    <UserPlus className="size-3.5" />
-                    {!activeOrcamento.lead_id ? "Atribuir Lead Agora" : "Trocar Lead"}
+                    {copied ? <Check /> : <Copy />}
+                    {copied ? "Copiado" : "Copiar proposta"}
                   </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => copyFormattedProposal(activeOrcamento)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 active:scale-95 transition-all"
-                >
-                  {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                  {copied ? "Copiado!" : "Copiar Proposta Comercial"}
-                </button>
+                </div>
               </div>
             </div>
 
-            {/* Raciocínio Técnico */}
             {activeOrcamento.raciocinio_tecnico && (
-              <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-3">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-accent flex items-center gap-2">
-                  <Cpu className="size-4" /> Raciocínio Técnico & Tomada de Decisão
-                </h4>
-                <p className="text-xs text-slate-300 leading-relaxed font-sans whitespace-pre-wrap">
-                  {activeOrcamento.raciocinio_tecnico}
-                </p>
+              <div className="omni-card">
+                <div className="omni-card__header py-3">
+                  <h2 className="omni-eyebrow flex items-center gap-1.5">
+                    <Cpu className="size-3.5" /> Raciocínio técnico
+                  </h2>
+                </div>
+                <div className="omni-card__body">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">
+                    {activeOrcamento.raciocinio_tecnico}
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* ─── OS 3 CENÁRIOS COMPARATIVOS ─── */}
-            <div className="grid gap-6 lg:grid-cols-3">
-              
-              {/* CENÁRIO 1: MÍNIMO */}
+            {/* Três cenários */}
+            <div className="grid items-start gap-6 lg:grid-cols-3">
               {activeOrcamento.opcoes_orcamento?.minimo && (
-                <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-5 flex flex-col justify-between hover:border-slate-400 transition-all">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Cenário 01</span>
-                        <h4 className="text-base font-extrabold text-foreground">Mínimo (MVP)</h4>
-                      </div>
-                      <span className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-2.5 py-1 text-[10px] font-bold text-slate-300">
-                        Econômico
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="rounded-xl border border-border/80 bg-secondary/40 p-3 flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground font-semibold">Valor Setup:</span>
-                        <span className="text-sm font-black text-foreground">
-                          {formatCurrency(activeOrcamento.opcoes_orcamento.minimo.setup)}
-                        </span>
-                      </div>
-                      <div className="rounded-xl border border-border/80 bg-secondary/40 p-3 flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground font-semibold">Mensalidade:</span>
-                        <span className="text-sm font-black text-foreground">
-                          {formatCurrency(activeOrcamento.opcoes_orcamento.minimo.mensalidade)}<span className="text-[10px] font-normal text-muted-foreground">/mês</span>
-                        </span>
-                      </div>
-                      {activeOrcamento.opcoes_orcamento.minimo.horas_estimadas && (
-                        <div className="text-[11px] text-muted-foreground flex items-center justify-between px-1">
-                          <span>Horas de desenvolvimento:</span>
-                          <span className="font-bold text-foreground">{activeOrcamento.opcoes_orcamento.minimo.horas_estimadas}h</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stack Utilizada */}
-                    {activeOrcamento.opcoes_orcamento.minimo.stack_utilizada && (
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Stack:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeOrcamento.opcoes_orcamento.minimo.stack_utilizada.map((st, i) => (
-                            <span key={i} className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-300">
-                              {st}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Descrição */}
-                    <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-border/60">
-                      {activeOrcamento.opcoes_orcamento.minimo.descricao}
-                    </p>
-                  </div>
-                </div>
+                <CenarioCard
+                  ordem="Cenário 01"
+                  titulo="Mínimo (MVP)"
+                  etiqueta="Econômico"
+                  cenario={activeOrcamento.opcoes_orcamento.minimo}
+                />
               )}
-
-              {/* CENÁRIO 2: IDEAL (DESTAQUE RECOMENDADO ⭐) */}
               {activeOrcamento.opcoes_orcamento?.ideal && (
-                <div className="relative rounded-2xl border-2 border-accent bg-gradient-to-b from-[#18183c] to-[#12122d] p-6 backdrop-blur-2xl shadow-2xl shadow-accent/10 space-y-5 flex flex-col justify-between scale-[1.02]">
-                  {/* Badge Flutuante Recomendado */}
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#fba834] to-[#f7931e] px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#0d0d26] shadow-lg shadow-[#fba834]/30">
-                      <Star className="size-3 fill-current" /> Recomendado Omni
-                    </span>
-                  </div>
-
-                  <div className="space-y-4 pt-1">
-                    <div className="flex items-center justify-between border-b border-accent/30 pb-3">
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-accent">Cenário 02</span>
-                        <h4 className="text-base font-black text-foreground">Ideal (Escalável)</h4>
-                      </div>
-                      <span className="rounded-lg border border-accent/40 bg-accent/15 px-2.5 py-1 text-[10px] font-black text-accent">
-                        Equilíbrio & ROI
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="rounded-xl border border-accent/40 bg-accent/10 p-3 flex items-center justify-between">
-                        <span className="text-xs text-accent font-bold">Valor Setup:</span>
-                        <span className="text-base font-black text-accent">
-                          {formatCurrency(activeOrcamento.opcoes_orcamento.ideal.setup)}
-                        </span>
-                      </div>
-                      <div className="rounded-xl border border-accent/40 bg-accent/10 p-3 flex items-center justify-between">
-                        <span className="text-xs text-accent font-bold">Mensalidade:</span>
-                        <span className="text-base font-black text-foreground">
-                          {formatCurrency(activeOrcamento.opcoes_orcamento.ideal.mensalidade)}<span className="text-[10px] font-normal text-muted-foreground">/mês</span>
-                        </span>
-                      </div>
-                      {activeOrcamento.opcoes_orcamento.ideal.horas_estimadas && (
-                        <div className="text-[11px] text-muted-foreground flex items-center justify-between px-1">
-                          <span>Horas de desenvolvimento:</span>
-                          <span className="font-bold text-accent">{activeOrcamento.opcoes_orcamento.ideal.horas_estimadas}h</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stack Utilizada */}
-                    {activeOrcamento.opcoes_orcamento.ideal.stack_utilizada && (
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-accent">Stack:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeOrcamento.opcoes_orcamento.ideal.stack_utilizada.map((st, i) => (
-                            <span key={i} className="rounded-md border border-accent/40 bg-accent/20 px-2 py-0.5 text-[10px] font-extrabold text-accent">
-                              {st}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Descrição */}
-                    <p className="text-xs text-slate-200 leading-relaxed pt-2 border-t border-accent/20">
-                      {activeOrcamento.opcoes_orcamento.ideal.descricao}
-                    </p>
-                  </div>
-                </div>
+                <CenarioCard
+                  ordem="Cenário 02"
+                  titulo="Ideal"
+                  etiqueta="Equilibrado"
+                  destaque
+                  cenario={activeOrcamento.opcoes_orcamento.ideal}
+                />
               )}
-
-              {/* CENÁRIO 3: MÁXIMO (ENTERPRISE / PREMIUM) */}
               {activeOrcamento.opcoes_orcamento?.maximo && (
-                <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-b from-card to-purple-500/10 p-6 backdrop-blur-2xl shadow-xl space-y-5 flex flex-col justify-between hover:border-purple-400 transition-all">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-purple-500/30 pb-3">
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">Cenário 03</span>
-                        <h4 className="text-base font-extrabold text-foreground">Máximo (Enterprise)</h4>
-                      </div>
-                      <span className="rounded-lg border border-purple-500/40 bg-purple-500/20 px-2.5 py-1 text-[10px] font-extrabold text-purple-300">
-                        <Rocket className="size-3 inline mr-1" /> Premium
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between">
-                        <span className="text-xs text-purple-300 font-semibold">Valor Setup:</span>
-                        <span className="text-sm font-black text-purple-300">
-                          {formatCurrency(activeOrcamento.opcoes_orcamento.maximo.setup)}
-                        </span>
-                      </div>
-                      <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between">
-                        <span className="text-xs text-purple-300 font-semibold">Mensalidade:</span>
-                        <span className="text-sm font-black text-foreground">
-                          {formatCurrency(activeOrcamento.opcoes_orcamento.maximo.mensalidade)}<span className="text-[10px] font-normal text-muted-foreground">/mês</span>
-                        </span>
-                      </div>
-                      {activeOrcamento.opcoes_orcamento.maximo.horas_estimadas && (
-                        <div className="text-[11px] text-muted-foreground flex items-center justify-between px-1">
-                          <span>Horas de desenvolvimento:</span>
-                          <span className="font-bold text-purple-300">{activeOrcamento.opcoes_orcamento.maximo.horas_estimadas}h</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stack Utilizada */}
-                    {activeOrcamento.opcoes_orcamento.maximo.stack_utilizada && (
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-400">Stack:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeOrcamento.opcoes_orcamento.maximo.stack_utilizada.map((st, i) => (
-                            <span key={i} className="rounded-md border border-purple-500/30 bg-purple-500/20 px-2 py-0.5 text-[10px] font-medium text-purple-200">
-                              {st}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Descrição */}
-                    <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-purple-500/20">
-                      {activeOrcamento.opcoes_orcamento.maximo.descricao}
-                    </p>
-                  </div>
-                </div>
+                <CenarioCard
+                  ordem="Cenário 03"
+                  titulo="Máximo (Enterprise)"
+                  etiqueta="Completo"
+                  cenario={activeOrcamento.opcoes_orcamento.maximo}
+                />
               )}
-
             </div>
 
-            {/* Perguntas Comerciais + Respostas do Comercial */}
-            {activeOrcamento.perguntas_comerciais && activeOrcamento.perguntas_comerciais.length > 0 && (
-              <div className="rounded-2xl border border-amber-500/30 bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-3">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-2">
-                  <HelpCircle className="size-4" /> Perguntas Estratégicas de Alinhamento Comercial
-                </h4>
-                <p className="text-[11px] text-muted-foreground -mt-2">
-                  O comercial responde aqui embaixo de cada pergunta. As respostas ficam salvas junto ao orçamento para o time técnico consultar.
-                </p>
-                <div className="space-y-3">
-                  {activeOrcamento.perguntas_comerciais.map((pergunta, i) => {
-                    const totalPerguntas = activeOrcamento.perguntas_comerciais!.length;
-                    const respostaSalva = activeOrcamento.respostas_perguntas_comerciais?.[i] || "";
-                    const draft = respostaDrafts[i] ?? respostaSalva;
-                    const isAnswered = !!respostaSalva.trim();
-                    const isDirty = draft.trim() !== respostaSalva.trim();
-                    const orcamentoId = activeOrcamento.orcamento_id;
+            {/* Perguntas comerciais */}
+            {activeOrcamento.perguntas_comerciais &&
+              activeOrcamento.perguntas_comerciais.length > 0 && (
+                <div className="omni-card">
+                  <div className="omni-card__header">
+                    <div>
+                      <h2 className="omni-h4 flex items-center gap-2">
+                        <HelpCircle className="size-4 text-ink-3" /> Perguntas de alinhamento
+                      </h2>
+                      <p className="omni-small mt-0.5">
+                        As respostas ficam salvas junto ao orçamento para o time técnico consultar.
+                      </p>
+                    </div>
+                  </div>
 
-                    return (
-                      <div key={i} className="rounded-xl border border-border/80 bg-secondary/40 p-3.5 text-xs text-slate-200 space-y-2.5">
-                        <div className="flex items-start gap-2.5">
-                          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-amber-500/20 text-[10px] font-bold text-amber-400">
-                            {i + 1}
-                          </span>
-                          <p className="leading-relaxed font-semibold text-foreground">{pergunta}</p>
-                        </div>
+                  <div className="omni-card__body omni-stack">
+                    {activeOrcamento.perguntas_comerciais.map((pergunta, i) => {
+                      const totalPerguntas = activeOrcamento.perguntas_comerciais!.length;
+                      const respostaSalva =
+                        activeOrcamento.respostas_perguntas_comerciais?.[i] || "";
+                      const draft = respostaDrafts[i] ?? respostaSalva;
+                      const isAnswered = !!respostaSalva.trim();
+                      const isDirty = draft.trim() !== respostaSalva.trim();
+                      const orcamentoId = activeOrcamento.orcamento_id;
 
-                        <div className="pl-7 space-y-2">
-                          <textarea
-                            value={draft}
-                            onChange={(e) =>
-                              setRespostaDrafts((prev) => ({ ...prev, [i]: e.target.value }))
-                            }
-                            rows={2}
-                            placeholder="Resposta do comercial sobre este ponto..."
-                            className="w-full rounded-lg border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-accent/60 resize-none leading-relaxed"
-                          />
+                      return (
+                        <div key={i} className="omni-card omni-card--inset">
+                          <div className="omni-card__body flex flex-col gap-3">
+                            <div className="flex items-start gap-3">
+                              <span className="omni-avatar omni-avatar--sm num" aria-hidden="true">
+                                {i + 1}
+                              </span>
+                              <p className="text-sm font-semibold leading-relaxed text-ink">
+                                {pergunta}
+                              </p>
+                            </div>
 
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={cn(
-                                "inline-flex items-center gap-1 text-[10px] font-bold",
-                                isAnswered ? "text-emerald-400" : "text-amber-400"
-                              )}
-                            >
-                              {isAnswered ? (
-                                <>
-                                  <CheckCircle2 className="size-3" /> Respondida
-                                </>
-                              ) : (
-                                <>
-                                  <AlertCircle className="size-3" /> Aguardando resposta do comercial
-                                </>
-                              )}
-                            </span>
+                            <div className="omni-field pl-9">
+                              <label className="omni-sr" htmlFor={`resposta-${i}`}>
+                                Resposta do comercial para a pergunta {i + 1}
+                              </label>
+                              <textarea
+                                id={`resposta-${i}`}
+                                value={draft}
+                                onChange={(e) =>
+                                  setRespostaDrafts((prev) => ({ ...prev, [i]: e.target.value }))
+                                }
+                                rows={2}
+                                placeholder="Resposta do comercial sobre este ponto"
+                                className="omni-textarea"
+                              />
 
-                            <button
-                              type="button"
-                              disabled={!isDirty || !orcamentoId || saveRespostaMutation.isPending}
-                              onClick={() =>
-                                saveRespostaMutation.mutate({
-                                  orcamentoId: orcamentoId!,
-                                  index: i,
-                                  resposta: draft,
-                                  respostasAtuais: activeOrcamento.respostas_perguntas_comerciais || [],
-                                  totalPerguntas,
-                                })
-                              }
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                            >
-                              <Check className="size-3" />
-                              Salvar resposta
-                            </button>
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={cn(
+                                    "omni-badge",
+                                    isAnswered ? "omni-badge--success" : "omni-badge--warning",
+                                  )}
+                                >
+                                  {isAnswered ? <CheckCircle2 /> : <AlertCircle />}
+                                  {isAnswered ? "Respondida" : "Aguardando resposta"}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    !isDirty || !orcamentoId || saveRespostaMutation.isPending
+                                  }
+                                  onClick={() =>
+                                    saveRespostaMutation.mutate({
+                                      orcamentoId: orcamentoId!,
+                                      index: i,
+                                      resposta: draft,
+                                      respostasAtuais:
+                                        activeOrcamento.respostas_perguntas_comerciais || [],
+                                      totalPerguntas,
+                                    })
+                                  }
+                                  className="omni-btn omni-btn--secondary omni-btn--sm"
+                                >
+                                  <Check /> Salvar resposta
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
-
+              )}
           </section>
         )}
 
-        {/* ══════ 4. HISTÓRICO DE ORÇAMENTOS GERADOS (SUPABASE) ══════ */}
-        <section className="space-y-4 pt-4 border-t border-border/60">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* ══════ 4. Histórico ══════ */}
+
+        <section className="omni-stack">
+          <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h3 className="text-base font-extrabold text-foreground flex items-center gap-2">
-                <History className="size-5 text-accent" /> Histórico de Orçamentos Salvos
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Orçamentos gerados com alerta para os que estão pendentes de vinculação com leads
+              <h2 className="omni-h3 flex items-center gap-2">
+                <History className="size-5 text-ink-3" /> Histórico de orçamentos
+              </h2>
+              <p className="omni-small mt-0.5">
+                Propostas já geradas, com destaque para as que ainda não têm negócio vinculado.
               </p>
             </div>
 
-            {/* Filtros e Busca */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Abas de Filtro de Status */}
-              <div className="flex items-center gap-1 rounded-xl border border-border/80 bg-secondary/40 p-1 text-xs">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="omni-btn-group" role="group" aria-label="Filtrar histórico">
                 <button
                   type="button"
+                  aria-pressed={statusFilter === "todos"}
                   onClick={() => setStatusFilter("todos")}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 font-bold transition-all",
-                    statusFilter === "todos" ? "bg-accent text-[#0d0d26] shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  )}
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
                 >
                   Todos ({orcamentos.length})
                 </button>
                 <button
                   type="button"
+                  aria-pressed={statusFilter === "sem_lead"}
                   onClick={() => setStatusFilter("sem_lead")}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 font-bold transition-all flex items-center gap-1",
-                    statusFilter === "sem_lead"
-                      ? "bg-amber-500/30 text-amber-300 border border-amber-500/50"
-                      : "text-amber-400/80 hover:text-amber-400"
-                  )}
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
                 >
-                  <AlertTriangle className="size-3" />
-                  Sem Lead ({unassignedCount})
+                  Sem negócio ({unassignedCount})
                 </button>
                 <button
                   type="button"
+                  aria-pressed={statusFilter === "com_lead"}
                   onClick={() => setStatusFilter("com_lead")}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 font-bold transition-all",
-                    statusFilter === "com_lead" ? "bg-emerald-500/30 text-emerald-300 border border-emerald-500/50" : "text-muted-foreground hover:text-foreground"
-                  )}
+                  className="omni-btn omni-btn--secondary omni-btn--sm"
                 >
                   Vinculados ({assignedCount})
                 </button>
               </div>
 
-              {/* Campo de Busca */}
-              <div className="relative">
-                <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar orçamento ou lead..."
-                  className="rounded-xl border border-white/10 bg-secondary/40 pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60 w-48 sm:w-60"
-                />
+              <div className="omni-field w-full sm:w-64">
+                <label className="omni-sr" htmlFor="busca-orcamento">
+                  Buscar orçamento
+                </label>
+                <div className="omni-input-group">
+                  <Search />
+                  <input
+                    id="busca-orcamento"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar orçamento ou negócio"
+                    className="omni-input"
+                  />
+                </div>
               </div>
             </div>
           </div>
 
           {isLoadingHistory ? (
-            <div className="py-16 text-center space-y-3">
-              <RefreshCw className="size-8 mx-auto animate-spin text-accent" />
-              <p className="text-xs text-muted-foreground">Carregando histórico...</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="omni-skeleton h-40 w-full" />
+              ))}
             </div>
           ) : filteredHistory.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-card/80 p-12 text-center space-y-3 backdrop-blur-2xl shadow-xl">
-              <Calculator className="size-10 mx-auto text-muted-foreground/30" />
-              <p className="text-sm font-bold text-foreground">Nenhum orçamento encontrado no filtro</p>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                {statusFilter === "sem_lead"
-                  ? "Todos os orçamentos já estão vinculados a leads! Ótimo trabalho."
-                  : "Utilize o campo no topo da página para gerar propostas técnicas com IA."}
-              </p>
+            <div className="omni-card">
+              <div className="omni-empty">
+                <span className="omni-empty__art">
+                  <Calculator />
+                </span>
+                <h4>Nenhum orçamento neste filtro</h4>
+                <p>
+                  {statusFilter === "sem_lead"
+                    ? "Todos os orçamentos já estão vinculados a um negócio."
+                    : "Use o formulário no topo da página para gerar a primeira proposta."}
+                </p>
+              </div>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1212,294 +1128,265 @@ function OrcamentosPage() {
                 const hasLead = !!orc.lead_id;
 
                 return (
-                  <div
+                  <button
                     key={orc.orcamento_id || Math.random()}
+                    type="button"
                     onClick={() => {
                       setActiveOrcamento(orc);
                       window.scrollTo({ top: 380, behavior: "smooth" });
                     }}
                     className={cn(
-                      "rounded-2xl border p-4.5 backdrop-blur-2xl shadow-lg transition-all cursor-pointer space-y-3 text-left group relative overflow-hidden",
-                      !hasLead
-                        ? "border-amber-500/50 bg-gradient-to-br from-card to-amber-500/[0.06] hover:border-amber-400"
-                        : isSelected
-                        ? "border-accent bg-accent/10 shadow-accent/10 scale-[1.01]"
-                        : "border-border bg-card/90 hover:border-accent/40 hover:bg-secondary/40"
+                      "omni-card group flex cursor-pointer flex-col gap-3 p-4 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni",
+                      isSelected ? "border-primary" : "hover:border-line-strong",
                     )}
                   >
-                    {/* Header do Card */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-black text-accent">
-                          #ORC-{orc.orcamento_id}
-                        </span>
-                        {orc.margem_lucro !== null && orc.margem_lucro !== undefined && (
-                          <span className="rounded px-1.5 py-0.2 text-[9px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                            {orc.margem_lucro}%
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Clock className="size-3 text-muted-foreground" /> {formatDate(orc.criado_em)}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="omni-code">ORC-{orc.orcamento_id}</span>
+                      <span className="num omni-small flex items-center gap-1">
+                        <Clock className="size-3" /> {formatDate(orc.criado_em)}
                       </span>
                     </div>
 
-                    {/* ALERTA OU NOME DO LEAD */}
-                    <div>
-                      {!hasLead ? (
-                        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 p-1.5 text-[11px] font-extrabold text-amber-300">
-                          <span className="flex items-center gap-1">
-                            <AlertTriangle className="size-3 text-amber-400 shrink-0 animate-pulse" />
-                            Sem Lead Vinculado
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModalAssignOrcamento(orc);
-                            }}
-                            className="rounded bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 px-2 py-0.5 text-[10px] font-black transition-colors"
-                          >
-                            Atribuir
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="font-bold text-slate-300 truncate flex items-center gap-1">
-                            <UserCheck className="size-3 text-emerald-400 shrink-0" />
-                            {orc.leads?.lead_nome || "Lead associado"}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModalAssignOrcamento(orc);
-                            }}
-                            className="text-[10px] text-muted-foreground hover:text-accent hover:underline shrink-0"
-                            title="Trocar lead"
-                          >
-                            Alterar
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    {!hasLead ? (
+                      <span className="omni-badge omni-badge--warning self-start">
+                        <AlertTriangle /> Sem negócio vinculado
+                      </span>
+                    ) : (
+                      <span className="omni-badge omni-badge--success self-start">
+                        <UserCheck /> {orc.leads?.lead_nome || "Negócio vinculado"}
+                      </span>
+                    )}
 
-                    {/* Texto da Solicitação */}
-                    <p className="text-xs font-bold text-foreground line-clamp-2 leading-snug group-hover:text-accent transition-colors">
+                    <p className="line-clamp-2 text-sm font-medium leading-snug text-ink">
                       {orc.solicitacao_original}
                     </p>
 
-                    {/* Setup e Mensalidade Ideal */}
                     {ideal && (
-                      <div className="flex items-center justify-between border-t border-white/5 pt-2.5 text-xs">
+                      <div className="mt-auto flex items-end justify-between border-t border-line-subtle pt-3">
                         <div>
-                          <span className="text-[9px] text-muted-foreground uppercase font-bold block">Setup Ideal</span>
-                          <span className="font-black text-foreground">{formatCurrency(ideal.setup)}</span>
+                          <p className="omni-small">Setup ideal</p>
+                          <p className="num text-sm font-semibold text-ink">
+                            {formatCurrency(ideal.setup)}
+                          </p>
                         </div>
                         <div className="text-right">
-                          <span className="text-[9px] text-muted-foreground uppercase font-bold block">Mensalidade</span>
-                          <span className="font-black text-accent">{formatCurrency(ideal.mensalidade)}/mês</span>
+                          <p className="omni-small">Mensalidade</p>
+                          <p className="num text-sm font-semibold text-ink">
+                            {formatCurrency(ideal.mensalidade)}/mês
+                          </p>
                         </div>
                       </div>
                     )}
-                  </div>
+
+                    {orc.margem_lucro !== null && orc.margem_lucro !== undefined && (
+                      <span className="omni-badge omni-badge--outline self-start">
+                        Margem {orc.margem_lucro}%
+                      </span>
+                    )}
+                  </button>
                 );
               })}
             </div>
           )}
         </section>
-
       </div>
 
-      {/* ══════ MODAL DE CONFIRMAÇÃO PRÉ-ENVIO AO WEBHOOK ══════ */}
+      {/* ══════ Modal: confirmar envio ══════ */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg rounded-2xl border border-accent/50 bg-[#12122d]/98 backdrop-blur-2xl p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="grid size-9 place-items-center rounded-xl bg-accent/20 text-accent font-black">
-                  <ShieldCheck className="size-5" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-extrabold text-foreground">Confirmar Solicitação de Orçamento</h3>
-                  <p className="text-[11px] text-muted-foreground">Revise os parâmetros antes de enviar para a IA processar</p>
-                </div>
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-confirmar"
+        >
+          <div className="omni-modal w-full max-w-[560px]">
+            <div className="omni-modal__header">
+              <div>
+                <h2 id="titulo-modal-confirmar" className="omni-h4 flex items-center gap-2">
+                  <ShieldCheck className="size-4 text-ink-3" /> Confirmar solicitação
+                </h2>
+                <p className="omni-small mt-1">Revise os parâmetros antes de enviar para a IA.</p>
               </div>
               <button
+                type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 transition-colors"
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
               >
-                <X className="size-4" />
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            {/* Parâmetros a serem confirmados */}
-            <div className="space-y-3">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
-                  Escopo do Projeto:
-                </span>
-                <p className="text-xs text-slate-200 leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
-                  {promptText}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="rounded-xl border border-accent/40 bg-accent/10 p-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-accent block">
-                    Margem de Lucro:
-                  </span>
-                  <p className="text-base font-black text-foreground mt-0.5">{margemLucro}%</p>
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground block">
-                    Lead Associado:
-                  </span>
-                  <p className="text-xs font-bold text-foreground mt-1 truncate">
-                    {selectedLeadObject ? selectedLeadObject.lead_nome || selectedLeadObject.lead_telefone : "Nenhum (Avulso)"}
+            <div className="omni-modal__body omni-stack">
+              <div className="omni-card omni-card--inset">
+                <div className="omni-card__body">
+                  <p className="omni-eyebrow">Escopo do projeto</p>
+                  <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink-2 scrollbar-slim">
+                    {promptText}
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-300 leading-snug flex items-start gap-2">
-                <Clock className="size-4 shrink-0 text-amber-400 mt-0.5" />
-                <span>
-                  O processamento da IA leva cerca de <strong>1 a 2 minutos</strong>. Uma tela de carregamento será exibida enquanto os 3 cenários são calculados.
-                </span>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="omni-card omni-card--inset">
+                  <div className="omni-stat p-4">
+                    <span className="omni-stat__label">Margem de lucro</span>
+                    <p className="num text-xl font-bold text-ink">{margemLucro}%</p>
+                  </div>
+                </div>
+                <div className="omni-card omni-card--inset">
+                  <div className="omni-stat p-4">
+                    <span className="omni-stat__label">Negócio vinculado</span>
+                    <p className="truncate text-sm font-semibold text-ink">
+                      {selectedLeadObject
+                        ? selectedLeadObject.lead_nome || selectedLeadObject.lead_telefone
+                        : "Nenhum"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="omni-alert omni-alert--info">
+                <Clock className="omni-alert__icon" />
+                <div className="omni-alert__body">
+                  <p className="omni-alert__title">O processamento leva de 1 a 2 minutos</p>
+                  <p className="omni-alert__text">
+                    Uma tela de acompanhamento aparece enquanto os três cenários são calculados. Não
+                    feche a página.
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Ações */}
-            <div className="flex items-center justify-end gap-2.5 border-t border-white/10 pt-3">
+            <div className="omni-modal__footer">
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-muted-foreground hover:bg-white/10 transition-colors"
+                className="omni-btn omni-btn--ghost"
               >
-                Voltar e Ajustar
+                Voltar e ajustar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmAndSend}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-5 py-2 text-xs font-black text-[#0d0d26] shadow-lg shadow-[#fba834]/20 hover:brightness-110 active:scale-95 transition-all"
+                className="omni-btn omni-btn--primary"
               >
-                <Check className="size-4" />
-                Confirmar e Enviar para IA
+                <Check /> Enviar para a IA
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══════ MODAL DE ATRIBUIÇÃO DE LEAD ══════ */}
+      {/* ══════ Modal: vincular negócio ══════ */}
       {modalAssignOrcamento && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#12122d]/95 backdrop-blur-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-lg bg-accent/20 text-accent font-bold">
-                  <UserPlus className="size-4" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-extrabold text-foreground">
-                    Atribuir Lead ao Orçamento #{modalAssignOrcamento.orcamento_id}
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    Selecione o lead correspondente para associar a esta proposta
-                  </p>
-                </div>
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-vincular"
+        >
+          <div className="omni-modal flex max-h-[90vh] w-full max-w-[560px] flex-col">
+            <div className="omni-modal__header shrink-0">
+              <div>
+                <h2 id="titulo-modal-vincular" className="omni-h4">
+                  Vincular negócio ao ORC-{modalAssignOrcamento.orcamento_id}
+                </h2>
+                <p className="omni-small mt-1">Escolha o negócio correspondente a esta proposta.</p>
               </div>
               <button
+                type="button"
                 onClick={() => setModalAssignOrcamento(null)}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 transition-colors"
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
               >
-                <X className="size-4" />
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
 
-            {/* Solicitação do Orçamento */}
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs text-muted-foreground leading-snug shrink-0 line-clamp-2">
-              <span className="font-bold text-slate-300">Projeto: </span>
-              {modalAssignOrcamento.solicitacao_original}
-            </div>
+            <div className="omni-modal__body omni-stack min-h-0 flex-1 overflow-hidden">
+              <p className="line-clamp-2 text-sm text-ink-3">
+                <span className="font-semibold text-ink-2">Projeto: </span>
+                {modalAssignOrcamento.solicitacao_original}
+              </p>
 
-            {/* Campo de Busca no Modal */}
-            <div className="relative shrink-0">
-              <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={leadModalSearch}
-                onChange={(e) => setLeadModalSearch(e.target.value)}
-                placeholder="Buscar lead por nome, telefone ou e-mail..."
-                className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60"
-                autoFocus
-              />
-            </div>
-
-            {/* Lista de Leads */}
-            <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-[220px] max-h-[340px]">
-              {filteredLeadsForModal.length === 0 ? (
-                <div className="py-8 text-center text-xs text-muted-foreground">
-                  Nenhum lead encontrado com esse termo de busca.
+              <div className="omni-field">
+                <label className="omni-sr" htmlFor="busca-lead-modal">
+                  Buscar negócio
+                </label>
+                <div className="omni-input-group">
+                  <Search />
+                  <input
+                    id="busca-lead-modal"
+                    value={leadModalSearch}
+                    onChange={(e) => setLeadModalSearch(e.target.value)}
+                    placeholder="Nome, telefone ou e-mail"
+                    className="omni-input"
+                    autoFocus
+                  />
                 </div>
-              ) : (
-                filteredLeadsForModal.map((lead) => {
-                  const isCurrent = modalAssignOrcamento.lead_id === lead.lead_id;
+              </div>
 
-                  return (
-                    <div
-                      key={lead.lead_id}
-                      onClick={() =>
-                        assignLeadMutation.mutate({
-                          orcamentoId: modalAssignOrcamento.orcamento_id!,
-                          leadId: lead.lead_id,
-                        })
-                      }
-                      className={cn(
-                        "flex items-center justify-between gap-3 rounded-xl border p-3 cursor-pointer transition-all group",
-                        isCurrent
-                          ? "border-emerald-500/50 bg-emerald-500/10"
-                          : "border-white/5 bg-white/[0.02] hover:border-accent/40 hover:bg-accent/5"
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-foreground group-hover:text-accent transition-colors truncate">
-                            {lead.lead_nome || lead.lead_telefone || "Lead sem nome"}
-                          </p>
-                          {lead.lead_etapa_funil && (
-                            <span className="rounded px-1.5 py-0.2 text-[9px] font-extrabold bg-secondary text-muted-foreground border border-white/5">
-                              {lead.lead_etapa_funil}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                          {lead.lead_telefone || lead.lead_email || "Sem dados de contato adicionais"}
-                        </p>
-                      </div>
+              <div className="min-h-[200px] flex-1 overflow-y-auto scrollbar-slim">
+                {filteredLeadsForModal.length === 0 ? (
+                  <div className="omni-empty">
+                    <h4>Nenhum negócio encontrado</h4>
+                    <p>Ajuste o termo da busca ou cadastre o negócio na tela de Negócios.</p>
+                  </div>
+                ) : (
+                  <div className="omni-list">
+                    {filteredLeadsForModal.map((lead) => {
+                      const isCurrent = modalAssignOrcamento.lead_id === lead.lead_id;
 
-                      <div className="shrink-0 text-right">
-                        {lead.lead_valor && (
-                          <p className="text-xs font-black text-accent">{formatCurrency(lead.lead_valor)}</p>
-                        )}
-                        {isCurrent ? (
-                          <span className="text-[10px] font-extrabold text-emerald-400 flex items-center gap-1 justify-end">
-                            <Check className="size-3" /> Vinculado
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                            Selecionar ➔
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                      return (
+                        <button
+                          key={lead.lead_id}
+                          type="button"
+                          onClick={() =>
+                            assignLeadMutation.mutate({
+                              orcamentoId: modalAssignOrcamento.orcamento_id!,
+                              leadId: lead.lead_id,
+                            })
+                          }
+                          className="omni-list__item w-full cursor-pointer text-left"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium text-ink">
+                                {lead.lead_nome || lead.lead_telefone || "Negócio sem nome"}
+                              </p>
+                              {lead.lead_etapa_funil && (
+                                <span className="omni-badge omni-badge--outline shrink-0">
+                                  {lead.lead_etapa_funil}
+                                </span>
+                              )}
+                            </div>
+                            <p className="omni-small truncate">
+                              {lead.lead_telefone || lead.lead_email || "Sem dados de contato"}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            {lead.lead_valor ? (
+                              <p className="num text-sm font-semibold text-ink">
+                                {formatCurrency(lead.lead_valor)}
+                              </p>
+                            ) : null}
+                            {isCurrent && (
+                              <span className="omni-badge omni-badge--success">
+                                <Check /> Vinculado
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Footer do Modal */}
-            <div className="flex items-center justify-between border-t border-white/10 pt-3 shrink-0">
+            <div className="omni-modal__footer shrink-0 justify-between">
               {modalAssignOrcamento.lead_id ? (
                 <button
                   type="button"
@@ -1509,20 +1396,18 @@ function OrcamentosPage() {
                       leadId: null,
                     })
                   }
-                  className="text-xs font-bold text-red-400 hover:underline flex items-center gap-1"
+                  className="omni-btn omni-btn--quiet omni-btn--sm text-danger"
                 >
-                  <Unlink className="size-3.5" /> Desvincular Lead Atual
+                  <Unlink /> Desvincular negócio
                 </button>
               ) : (
-                <span className="text-[11px] text-muted-foreground">
-                  Selecione um lead para vincular a esta proposta.
-                </span>
+                <span className="omni-small">Escolha um negócio na lista acima.</span>
               )}
 
               <button
                 type="button"
                 onClick={() => setModalAssignOrcamento(null)}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold text-muted-foreground hover:bg-white/10"
+                className="omni-btn omni-btn--ghost"
               >
                 Fechar
               </button>
@@ -1530,7 +1415,6 @@ function OrcamentosPage() {
           </div>
         </div>
       )}
-
     </AppShell>
   );
 }

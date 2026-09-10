@@ -8,18 +8,12 @@ import {
   Phone,
   Mail,
   Calendar,
-  DollarSign,
-  Tag,
   CheckCircle2,
   XCircle,
   User,
   MessageSquare,
   Clock,
-  ExternalLink,
   Edit3,
-  Loader2,
-  Building2,
-  FileText,
   Sparkles,
   X,
   UserCheck,
@@ -31,7 +25,6 @@ import {
   Plus,
   CheckSquare,
   Square,
-  AlertTriangle,
   CalendarDays,
   ListTodo,
 } from "lucide-react";
@@ -128,6 +121,14 @@ export const ETAPAS_FUNIL_REAL = [
   "Venda Realizada",
 ] as const;
 
+/* Prioridade: cor sempre acompanhada de rótulo em texto. */
+const PRIORIDADE_MAP = {
+  urgente: { label: "Urgente", badge: "omni-badge--danger" },
+  alta: { label: "Alta", badge: "omni-badge--warning" },
+  media: { label: "Média", badge: "omni-badge--info" },
+  baixa: { label: "Baixa", badge: "omni-badge--outline" },
+} as const;
+
 function parseUtmData(raw: string | UtmData | null | undefined): UtmData | null {
   if (!raw) return null;
   if (typeof raw === "object") return raw;
@@ -141,7 +142,9 @@ function parseUtmData(raw: string | UtmData | null | undefined): UtmData | null 
 function parseNumberValue(val: number | string | null | undefined): number {
   if (val === null || val === undefined || val === "") return 0;
   if (typeof val === "number") return val;
-  const cleaned = String(val).replace(/[^\d.,-]/g, "").replace(",", ".");
+  const cleaned = String(val)
+    .replace(/[^\d.,-]/g, "")
+    .replace(",", ".");
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }
@@ -195,18 +198,21 @@ function LeadDetailPage() {
   const queryClient = useQueryClient();
 
   /* Tab state */
-  const [activeTab, setActiveTab] = useState<"atendimento" | "tarefas" | "anotacoes">("atendimento");
+  const [activeTab, setActiveTab] = useState<"atendimento" | "tarefas" | "anotacoes">(
+    "atendimento",
+  );
 
   const [isLossModalOpen, setIsLossModalOpen] = useState(false);
   const [editingValor, setEditingValor] = useState(false);
   const [valorInput, setValorInput] = useState("");
   const [anotacaoTexto, setAnotacaoTexto] = useState("");
-  
+
   /* State para nova tarefa */
   const [tarefaTitulo, setTarefaTitulo] = useState("");
   const [tarefaVencimento, setTarefaVencimento] = useState(new Date().toISOString().split("T")[0]);
   const [tarefaPrioridade, setTarefaPrioridade] = useState<Tarefa["prioridade"]>("media");
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [tarefaTituloInvalido, setTarefaTituloInvalido] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -249,7 +255,7 @@ function LeadDetailPage() {
   });
 
   /* Fetch mensagens */
-  const { data: mensagens = [] } = useQuery<Mensagem[]>({
+  const { data: mensagens = [], isLoading: isMensagensLoading } = useQuery<Mensagem[]>({
     queryKey: ["mensagens", leadId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -286,7 +292,7 @@ function LeadDetailPage() {
   });
 
   /* Fetch tarefas */
-  const { data: tarefas = [] } = useQuery<Tarefa[]>({
+  const { data: tarefas = [], isLoading: isTarefasLoading } = useQuery<Tarefa[]>({
     queryKey: ["tarefas_lead", leadId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -328,10 +334,7 @@ function LeadDetailPage() {
   /* Update lead mutation */
   const updateMutation = useMutation({
     mutationFn: async (updates: Partial<Lead>) => {
-      const { error } = await supabase
-        .from("leads")
-        .update(updates)
-        .eq("lead_id", leadId);
+      const { error } = await supabase.from("leads").update(updates).eq("lead_id", leadId);
 
       if (error) throw error;
     },
@@ -395,7 +398,11 @@ function LeadDetailPage() {
 
   /* Add Tarefa Mutation */
   const addTarefaMutation = useMutation({
-    mutationFn: async (payload: { titulo: string; data_vencimento: string; prioridade: Tarefa["prioridade"] }) => {
+    mutationFn: async (payload: {
+      titulo: string;
+      data_vencimento: string;
+      prioridade: Tarefa["prioridade"];
+    }) => {
       const { error } = await supabase.from("tarefas").insert([
         {
           lead_id: leadId,
@@ -442,10 +449,7 @@ function LeadDetailPage() {
   /* Delete Tarefa Mutation */
   const deleteTarefaMutation = useMutation({
     mutationFn: async (tarefaId: string) => {
-      const { error } = await supabase
-        .from("tarefas")
-        .delete()
-        .eq("tarefa_id", tarefaId);
+      const { error } = await supabase.from("tarefas").delete().eq("tarefa_id", tarefaId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -460,11 +464,13 @@ function LeadDetailPage() {
 
   if (isLeadLoading) {
     return (
-      <AppShell title="Carregando Lead..." subtitle="Aguarde um instante">
-        <div className="flex h-96 items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <Loader2 className="size-8 animate-spin text-accent" />
-            <p className="text-sm font-medium">Buscando informações do lead...</p>
+      <AppShell title="Carregando negócio" subtitle="Buscando os dados no banco">
+        <div className="omni-stack-6">
+          <div className="omni-skeleton h-40 w-full" />
+          <div className="omni-skeleton h-28 w-full" />
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="omni-skeleton h-80 w-full" />
+            <div className="omni-skeleton h-80 w-full lg:col-span-2" />
           </div>
         </div>
       </AppShell>
@@ -473,21 +479,23 @@ function LeadDetailPage() {
 
   if (isLeadError || !lead) {
     return (
-      <AppShell title="Lead Não Encontrado" subtitle="Negócio não localizado">
-        <div className="flex h-96 items-center justify-center p-6">
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center max-w-md">
-            <XCircle className="mx-auto size-12 text-destructive" />
-            <h2 className="mt-3 text-lg font-bold text-foreground">Lead não encontrado</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {(leadError as Error)?.message || "O registro do lead não foi localizado no banco."}
-            </p>
-            <button
-              onClick={() => navigate({ to: "/negocios" })}
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:brightness-110"
-            >
-              <ArrowLeft className="size-4" /> Voltar para Negócios
-            </button>
-          </div>
+      <AppShell title="Negócio não encontrado" subtitle="O registro não foi localizado">
+        <div className="omni-empty">
+          <span className="omni-empty__art">
+            <XCircle />
+          </span>
+          <h4>Este negócio não existe mais</h4>
+          <p>
+            {(leadError as Error)?.message ||
+              "O registro pode ter sido excluído. Volte para o funil e abra o negócio a partir de lá."}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/negocios" })}
+            className="omni-btn omni-btn--primary"
+          >
+            <ArrowLeft /> Voltar para o funil
+          </button>
         </div>
       </AppShell>
     );
@@ -542,146 +550,146 @@ function LeadDetailPage() {
   const cleanPhone = lead.lead_telefone ? lead.lead_telefone.replace(/\D/g, "") : "";
   const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone}` : null;
 
-  const prioridadeMap = {
-    urgente: { label: "Urgente", cls: "text-red-400 bg-red-500/15 border-red-500/30" },
-    alta: { label: "Alta", cls: "text-amber-400 bg-amber-500/15 border-amber-500/30" },
-    media: { label: "Média", cls: "text-blue-400 bg-blue-500/15 border-blue-500/30" },
-    baixa: { label: "Baixa", cls: "text-slate-400 bg-slate-500/15 border-slate-500/30" },
-  };
-
   const tarefasPendentesCount = tarefas.filter((t) => t.status === "pendente").length;
+  const etapaAtual = lead.lead_etapa_funil || "Novo Lead";
+  const indiceEtapaAtual = ETAPAS_FUNIL_REAL.indexOf(etapaAtual as any);
 
   return (
     <AppShell
-      title={`Lead: ${displayName}`}
-      subtitle={`Gestão comercial · Criado em ${formatDateTime(lead.criado_em)}`}
+      title={displayName}
+      subtitle={`Negócio criado em ${formatDateTime(lead.criado_em)}`}
       actions={
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => navigate({ to: "/negocios" })}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary/80 px-3.5 py-2 text-xs font-bold text-foreground hover:bg-secondary transition-all"
+            className="omni-btn omni-btn--ghost omni-btn--sm"
           >
-            <ArrowLeft className="size-4" /> Voltar ao Funil
+            <ArrowLeft /> Voltar ao funil
           </button>
           {whatsappUrl && (
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-500/20 transition-all"
+              className="omni-btn omni-btn--secondary omni-btn--sm"
             >
-              <MessageSquare className="size-4" /> WhatsApp
+              <MessageSquare /> Abrir WhatsApp
             </a>
           )}
         </div>
       }
     >
-      <div className="w-full space-y-6 pb-12">
-        {/* ══════ 1. BANNER PRINCIPAL DO LEAD ══════ */}
-        <section className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-[#fba834] to-[#f7931e] text-xl font-extrabold text-[#0d0d26] shadow-lg shadow-[#fba834]/20">
+      <div className="omni-stack-6 w-full">
+        {/* ══════ 1. Identificação do negócio ══════ */}
+
+        <section className="omni-card">
+          <div className="omni-card__body flex flex-wrap items-start justify-between gap-6">
+            <div className="flex min-w-0 items-center gap-4">
+              <span className="omni-avatar omni-avatar--lg" aria-hidden="true">
                 {getInitials(lead.lead_nome)}
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-extrabold text-foreground">{displayName}</h1>
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="omni-h2">{displayName}</h2>
                   {lead.lead_status === "Ganho" && (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-extrabold text-emerald-400">
-                      <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <CheckCircle2 className="size-3.5" /> Ganho (Cliente Ativo)
+                    <span className="omni-badge omni-badge--success">
+                      <CheckCircle2 /> Ganho — cliente ativo
                     </span>
                   )}
                   {lead.lead_status === "Perdido" && (
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/15 px-2.5 py-1 text-xs font-extrabold text-red-400">
-                      <XCircle className="size-3.5" /> Perdido {motivoObj ? `(${motivoObj.motivo_nome})` : ""}
+                    <span className="omni-badge omni-badge--danger">
+                      <XCircle /> Perdido
+                      {motivoObj ? ` — ${motivoObj.motivo_nome}` : ""}
                     </span>
                   )}
                   {lead.lead_status === "Aberto" && (
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-extrabold text-accent">
-                      <Clock className="size-3.5" /> Em Negociação
+                    <span className="omni-badge omni-badge--info">
+                      <Clock /> Em negociação
                     </span>
                   )}
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-ink-3">
                   {lead.lead_telefone && (
-                    <span className="flex items-center gap-1.5 font-medium text-foreground">
-                      <Phone className="size-3.5 text-accent" /> {lead.lead_telefone}
+                    <span className="num flex items-center gap-1.5 text-ink-2">
+                      <Phone className="size-3.5" /> {lead.lead_telefone}
                     </span>
                   )}
                   {lead.lead_email && (
-                    <span className="flex items-center gap-1.5 font-medium text-foreground">
-                      <Mail className="size-3.5 text-accent" /> {lead.lead_email}
+                    <span className="flex items-center gap-1.5 text-ink-2">
+                      <Mail className="size-3.5" /> {lead.lead_email}
                     </span>
                   )}
-                  <span className="flex items-center gap-1">
-                    <Calendar className="size-3.5 text-muted-foreground" /> Criado em {formatDateTime(lead.criado_em)}
+                  <span className="num flex items-center gap-1.5">
+                    <Calendar className="size-3.5" /> {formatDateTime(lead.criado_em)}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="text-right bg-secondary/40 border border-border/60 rounded-xl p-3.5 min-w-[200px]">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                Valor da Oportunidade
-              </p>
-              {editingValor ? (
-                <div className="mt-1 flex items-center justify-end gap-1.5">
-                  <input
-                    value={valorInput}
-                    onChange={(e) => setValorInput(e.target.value)}
-                    placeholder="0,00"
-                    className="w-28 rounded-lg border border-accent bg-background px-2 py-1 text-xs font-bold text-foreground outline-none text-right"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveValor}
-                    className="rounded-lg bg-accent px-2 py-1 text-xs font-bold text-[#0d0d26]"
-                  >
-                    Salvar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingValor(false)}
-                    className="p-1 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-end gap-2 mt-0.5">
-                  <p className="text-2xl font-black text-accent">
-                    {formatCurrency(lead.lead_valor)}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setValorInput(lead.lead_valor ? String(lead.lead_valor) : "");
-                      setEditingValor(true);
-                    }}
-                    className="p-1 text-muted-foreground hover:text-accent transition-colors"
-                    title="Editar valor"
-                  >
-                    <Edit3 className="size-3.5" />
-                  </button>
-                </div>
-              )}
+            <div className="omni-card omni-card--inset min-w-[220px]">
+              <div className="omni-stat p-4">
+                <span className="omni-stat__label">Valor da oportunidade</span>
+                {editingValor ? (
+                  <div className="flex items-center gap-2">
+                    <label className="omni-sr" htmlFor="lead-valor">
+                      Valor da oportunidade em reais
+                    </label>
+                    <input
+                      id="lead-valor"
+                      value={valorInput}
+                      onChange={(e) => setValorInput(e.target.value)}
+                      placeholder="0,00"
+                      className="omni-input num"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveValor}
+                      className="omni-btn omni-btn--secondary omni-btn--sm"
+                    >
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingValor(false)}
+                      className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                    >
+                      <X />
+                      <span className="omni-sr">Cancelar edição</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className="omni-stat__value">{formatCurrency(lead.lead_valor)}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValorInput(lead.lead_valor ? String(lead.lead_valor) : "");
+                        setEditingValor(true);
+                      }}
+                      className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                      title="Editar valor"
+                    >
+                      <Edit3 />
+                      <span className="omni-sr">Editar valor da oportunidade</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Botões de Ação Rápida */}
-          <div className="mt-6 flex flex-wrap items-center gap-2.5 border-t border-border/60 pt-4">
+          <div className="omni-card__footer justify-start gap-2">
             {lead.lead_status !== "Ganho" && (
               <button
                 type="button"
                 onClick={() => handleStatusChange("Ganho")}
                 disabled={updateMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all disabled:opacity-50"
+                className="omni-btn omni-btn--primary omni-btn--sm"
               >
-                <CheckCircle2 className="size-4" /> Marcar como Ganho
+                <CheckCircle2 /> Marcar como ganho
               </button>
             )}
 
@@ -690,9 +698,9 @@ function LeadDetailPage() {
                 type="button"
                 onClick={() => setIsLossModalOpen(true)}
                 disabled={updateMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                className="omni-btn omni-btn--secondary omni-btn--sm"
               >
-                <XCircle className="size-4" /> Marcar como Perdido
+                <XCircle /> Registrar perda
               </button>
             )}
 
@@ -701,248 +709,242 @@ function LeadDetailPage() {
                 type="button"
                 onClick={() => handleStatusChange("Aberto")}
                 disabled={updateMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-4 py-2 text-xs font-bold text-foreground hover:border-accent/40 transition-all disabled:opacity-50"
+                className="omni-btn omni-btn--secondary omni-btn--sm"
               >
-                <RefreshCw className="size-4 text-accent" /> Reabrir Oportunidade
+                <RefreshCw /> Reabrir oportunidade
               </button>
             )}
 
             {clienteVinculado && (
-              <Link
-                to="/clientes"
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all ml-auto"
-              >
-                <UserCheck className="size-4" /> Ver Ficha de Cliente
+              <Link to="/clientes" className="omni-btn omni-btn--quiet omni-btn--sm ml-auto">
+                <UserCheck /> Ver ficha do cliente
               </Link>
             )}
           </div>
         </section>
 
-        {/* ══════ 2. RÉGUA DE PROGRESSO DAS ETAPAS DO FUNIL ══════ */}
-        <section className="rounded-2xl border border-border bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <SlidersHorizontal className="size-4 text-accent" /> Etapa Atual do Funil
-            </h3>
-            <span className="rounded-lg bg-accent/15 border border-accent/30 px-2.5 py-0.5 text-xs font-extrabold text-accent">
-              {lead.lead_etapa_funil || "Novo Lead"}
-            </span>
+        {/* ══════ 2. Etapa do funil ══════ */}
+
+        <section className="omni-card">
+          <div className="omni-card__header py-3">
+            <h2 className="omni-eyebrow flex items-center gap-1.5">
+              <SlidersHorizontal className="size-3.5" /> Etapa do funil
+            </h2>
+            <span className="omni-badge omni-badge--brand">{etapaAtual}</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 pt-1">
+          <div className="omni-card__body grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
             {ETAPAS_FUNIL_REAL.map((stg, idx) => {
-              const isCurrent = (lead.lead_etapa_funil || "Novo Lead") === stg;
+              const isCurrent = etapaAtual === stg;
+              const isPast = indiceEtapaAtual > -1 && idx < indiceEtapaAtual;
               return (
                 <button
                   key={stg}
                   type="button"
+                  aria-current={isCurrent ? "step" : undefined}
                   onClick={() => handleStageChange(stg)}
                   disabled={updateMutation.isPending}
                   className={cn(
-                    "rounded-xl border p-2.5 text-left transition-all relative overflow-hidden group",
+                    "flex flex-col gap-1 rounded-md border p-2.5 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni",
                     isCurrent
-                      ? "border-accent bg-accent/20 text-accent shadow-md shadow-accent/10"
-                      : "border-border bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground hover:border-accent/40"
+                      ? "border-primary bg-primary-soft text-primary-soft-fg"
+                      : isPast
+                        ? "border-line bg-surface-2 text-ink-2 hover:border-line-strong"
+                        : "border-line text-ink-3 hover:border-line-strong hover:text-ink",
                   )}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-bold opacity-60">0{idx + 1}</span>
-                    {isCurrent && <span className="size-2 rounded-full bg-accent animate-ping" />}
-                  </div>
-                  <p className="text-[11px] font-bold leading-tight">{stg}</p>
+                  <span className="num text-2xs font-semibold opacity-70">
+                    {String(idx + 1).padStart(2, "0")}
+                    {isPast && " ✓"}
+                  </span>
+                  <span className="text-xs font-semibold leading-tight">{stg}</span>
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* ══════ 3. GRID CENTRAL: DADOS NA LATERAL & ABAS INTERATIVAS ══════ */}
+        {/* ══════ 3. Dados e abas ══════ */}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          
-          {/* ──── Coluna Esquerda (1/3): Dados Cadastrais & Rastreamento ──── */}
-          <div className="space-y-6 lg:col-span-1">
-            <div className="rounded-2xl border border-border bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-4">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <User className="size-4 text-accent" /> Dados Cadastrais
-              </h3>
-              <dl className="space-y-3 text-xs">
-                <div className="border-b border-border/40 pb-2">
-                  <dt className="text-muted-foreground mb-0.5">Nome / Contato</dt>
-                  <dd className="font-bold text-foreground text-sm">{lead.lead_nome || "Não informado"}</dd>
+          {/* ──── Coluna esquerda ──── */}
+          <div className="omni-stack-6 lg:col-span-1">
+            <section className="omni-card">
+              <div className="omni-card__header py-3">
+                <h2 className="omni-eyebrow flex items-center gap-1.5">
+                  <User className="size-3.5" /> Dados cadastrais
+                </h2>
+              </div>
+              <dl className="omni-list">
+                <div className="omni-list__item flex-col items-start gap-0.5">
+                  <dt className="omni-small">Nome / contato</dt>
+                  <dd className="text-sm font-semibold text-ink">
+                    {lead.lead_nome || "Não informado"}
+                  </dd>
                 </div>
-                <div className="border-b border-border/40 pb-2">
-                  <dt className="text-muted-foreground mb-0.5">WhatsApp / Telefone</dt>
-                  <dd className="font-semibold text-foreground">{lead.lead_telefone || "Não informado"}</dd>
+                <div className="omni-list__item flex-col items-start gap-0.5">
+                  <dt className="omni-small">WhatsApp / telefone</dt>
+                  <dd className="num text-sm font-medium text-ink">
+                    {lead.lead_telefone || "Não informado"}
+                  </dd>
                 </div>
-                <div className="border-b border-border/40 pb-2">
-                  <dt className="text-muted-foreground mb-0.5">E-mail</dt>
-                  <dd className="font-semibold text-foreground truncate">{lead.lead_email || "Não informado"}</dd>
+                <div className="omni-list__item w-full flex-col items-start gap-0.5">
+                  <dt className="omni-small">E-mail</dt>
+                  <dd className="w-full truncate text-sm font-medium text-ink">
+                    {lead.lead_email || "Não informado"}
+                  </dd>
                 </div>
-                <div className="border-b border-border/40 pb-2">
-                  <dt className="text-muted-foreground mb-0.5">Origem do Lead</dt>
-                  <dd className="font-bold text-accent">{lead.lead_origem || "Meta Ads / Direct"}</dd>
+                <div className="omni-list__item flex-col items-start gap-0.5">
+                  <dt className="omni-small">Origem</dt>
+                  <dd className="text-sm font-medium text-ink">
+                    {lead.lead_origem || "Meta Ads / Direct"}
+                  </dd>
                 </div>
-                <div>
-                  <dt className="text-muted-foreground mb-0.5">ID Interno</dt>
-                  <dd className="font-mono text-[10px] text-muted-foreground truncate">{lead.lead_id}</dd>
+                <div className="omni-list__item w-full flex-col items-start gap-0.5">
+                  <dt className="omni-small">ID interno</dt>
+                  <dd className="omni-code w-full truncate">{lead.lead_id}</dd>
                 </div>
               </dl>
-            </div>
+            </section>
 
             {utm && (
-              <div className="rounded-2xl border border-border bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-3">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="size-4 text-accent" /> Rastreamento / Meta Ads
-                </h3>
-                <dl className="grid grid-cols-2 gap-3 text-xs">
+              <section className="omni-card">
+                <div className="omni-card__header py-3">
+                  <h2 className="omni-eyebrow flex items-center gap-1.5">
+                    <Sparkles className="size-3.5" /> Rastreamento do anúncio
+                  </h2>
+                </div>
+                <dl className="omni-card__body grid grid-cols-2 gap-4 text-xs">
                   {utm.ad_title && (
-                    <div className="col-span-2 border-b border-border/40 pb-2">
-                      <dt className="text-muted-foreground mb-0.5">Anúncio</dt>
-                      <dd className="font-bold text-foreground">{utm.ad_title}</dd>
+                    <div className="col-span-2">
+                      <dt className="omni-small">Anúncio</dt>
+                      <dd className="font-semibold text-ink">{utm.ad_title}</dd>
                     </div>
                   )}
                   {utm.source_app && (
                     <div>
-                      <dt className="text-muted-foreground mb-0.5">Plataforma</dt>
-                      <dd className="font-bold capitalize text-foreground">{utm.source_app}</dd>
+                      <dt className="omni-small">Plataforma</dt>
+                      <dd className="font-medium capitalize text-ink">{utm.source_app}</dd>
                     </div>
                   )}
                   {utm.entry_point && (
                     <div>
-                      <dt className="text-muted-foreground mb-0.5">Ponto de Entrada</dt>
-                      <dd className="font-bold text-foreground">{utm.entry_point}</dd>
+                      <dt className="omni-small">Ponto de entrada</dt>
+                      <dd className="font-medium text-ink">{utm.entry_point}</dd>
                     </div>
                   )}
                 </dl>
-              </div>
+              </section>
             )}
 
-            {/* Resumo de Atividades Pendentes */}
-            <div className="rounded-2xl border border-border bg-card/90 p-4 backdrop-blur-2xl shadow-xl space-y-3">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <ListTodo className="size-4 text-accent" /> Resumo de Atividades
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
+            <section className="omni-card">
+              <div className="omni-card__header py-3">
+                <h2 className="omni-eyebrow flex items-center gap-1.5">
+                  <ListTodo className="size-3.5" /> Resumo de atividades
+                </h2>
+              </div>
+              <div className="omni-card__body grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setActiveTab("tarefas")}
-                  className="rounded-xl border border-border/80 bg-secondary/40 p-3 text-left hover:border-accent/40 transition-all group"
+                  className="omni-card omni-card--inset cursor-pointer p-3 text-left transition-colors hover:border-line-strong"
                 >
-                  <p className="text-[11px] text-muted-foreground">Tarefas Pendentes</p>
-                  <p className="text-lg font-black text-foreground group-hover:text-accent transition-colors">
-                    {tarefasPendentesCount}
-                  </p>
+                  <p className="omni-small">Tarefas pendentes</p>
+                  <p className="num text-xl font-bold text-ink">{tarefasPendentesCount}</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("anotacoes")}
-                  className="rounded-xl border border-border/80 bg-secondary/40 p-3 text-left hover:border-accent/40 transition-all group"
+                  className="omni-card omni-card--inset cursor-pointer p-3 text-left transition-colors hover:border-line-strong"
                 >
-                  <p className="text-[11px] text-muted-foreground">Anotações</p>
-                  <p className="text-lg font-black text-foreground group-hover:text-accent transition-colors">
-                    {anotacoes.length}
-                  </p>
+                  <p className="omni-small">Anotações</p>
+                  <p className="num text-xl font-bold text-ink">{anotacoes.length}</p>
                 </button>
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* ──── Coluna Direita (2/3): SISTEMA DE ABAS (Atendimento, Tarefas, Anotações) ──── */}
-          <div className="space-y-4 lg:col-span-2">
-            
-            {/* Navegação por Abas */}
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card/90 p-1.5 backdrop-blur-2xl shadow-xl">
+          {/* ──── Coluna direita ──── */}
+          <div className="flex flex-col gap-4 lg:col-span-2">
+            <div className="omni-tabs" role="tablist" aria-label="Conteúdo do negócio">
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "atendimento"}
                 onClick={() => setActiveTab("atendimento")}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all",
-                  activeTab === "atendimento"
-                    ? "bg-accent text-[#0d0d26] shadow-md shadow-accent/20"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                )}
+                className="omni-tab"
               >
-                <MessageSquare className="size-4" />
-                <span>Atendimento & Conversas</span>
-                <span className={cn(
-                  "rounded-full px-2 py-0.2 text-[10px] font-extrabold",
-                  activeTab === "atendimento" ? "bg-[#0d0d26]/20 text-[#0d0d26]" : "bg-secondary text-muted-foreground"
-                )}>
-                  {mensagens.length}
-                </span>
+                <MessageSquare className="size-4" /> Atendimento
+                <span className="omni-badge omni-badge--outline">{mensagens.length}</span>
               </button>
 
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "tarefas"}
                 onClick={() => setActiveTab("tarefas")}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all",
-                  activeTab === "tarefas"
-                    ? "bg-accent text-[#0d0d26] shadow-md shadow-accent/20"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                )}
+                className="omni-tab"
               >
-                <CheckSquare className="size-4" />
-                <span>Tarefas & Follow-ups</span>
-                {tarefasPendentesCount > 0 && (
-                  <span className={cn(
-                    "rounded-full px-2 py-0.2 text-[10px] font-extrabold",
-                    activeTab === "tarefas" ? "bg-[#0d0d26]/20 text-[#0d0d26]" : "bg-amber-500/20 text-amber-400"
-                  )}>
-                    {tarefasPendentesCount}
-                  </span>
-                )}
+                <CheckSquare className="size-4" /> Tarefas
+                <span
+                  className={cn(
+                    "omni-badge",
+                    tarefasPendentesCount > 0 ? "omni-badge--warning" : "omni-badge--outline",
+                  )}
+                >
+                  {tarefasPendentesCount}
+                </span>
               </button>
 
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "anotacoes"}
                 onClick={() => setActiveTab("anotacoes")}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all",
-                  activeTab === "anotacoes"
-                    ? "bg-accent text-[#0d0d26] shadow-md shadow-accent/20"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                )}
+                className="omni-tab"
               >
-                <StickyNote className="size-4" />
-                <span>Anotações Internas</span>
-                <span className={cn(
-                  "rounded-full px-2 py-0.2 text-[10px] font-extrabold",
-                  activeTab === "anotacoes" ? "bg-[#0d0d26]/20 text-[#0d0d26]" : "bg-secondary text-muted-foreground"
-                )}>
-                  {anotacoes.length}
-                </span>
+                <StickyNote className="size-4" /> Anotações
+                <span className="omni-badge omni-badge--outline">{anotacoes.length}</span>
               </button>
             </div>
 
-            {/* ══════ ABA 1: HISTÓRICO DE ATENDIMENTO ══════ */}
+            {/* ══════ Aba 1: atendimento ══════ */}
             {activeTab === "atendimento" && (
-              <div className="flex flex-col rounded-2xl border border-border bg-card/90 backdrop-blur-2xl shadow-xl h-[560px] animate-in fade-in duration-200">
-                <div className="flex items-center justify-between border-b border-border px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="size-4 text-accent" />
-                    <h3 className="text-sm font-extrabold text-foreground">Histórico de Atendimento</h3>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="flex items-center gap-1 text-slate-400 text-[11px]">
-                      <span className="size-2 rounded-full bg-slate-400" /> Cliente
+              <section className="omni-card flex h-[560px] flex-col">
+                <div className="omni-card__header py-3">
+                  <h2 className="omni-h4">Histórico de atendimento</h2>
+                  <div className="omni-legend text-xs">
+                    <span className="flex items-center gap-1.5 text-ink-3">
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ background: "var(--omni-border-strong)" }}
+                        aria-hidden="true"
+                      />
+                      Cliente
                     </span>
-                    <span className="flex items-center gap-1 text-accent text-[11px]">
-                      <span className="size-2 rounded-full bg-accent" /> IA Paola
-                    </span>
-                    <span className="text-muted-foreground font-semibold text-[11px] border-l border-border pl-2">
-                      {mensagens.length} {mensagens.length === 1 ? "mensagem" : "mensagens"}
+                    <span className="flex items-center gap-1.5 text-ink-3">
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ background: "var(--omni-primary)" }}
+                        aria-hidden="true"
+                      />
+                      Paola · IA
                     </span>
                   </div>
                 </div>
 
-                <div className="flex-1 space-y-3.5 p-6 overflow-y-auto">
-                  {mensagens.length === 0 ? (
-                    <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
-                      <MessageSquare className="size-10 text-muted-foreground/30 mb-2" />
-                      <p className="text-xs font-semibold">Nenhuma mensagem registrada para este lead.</p>
-                      <p className="text-[11px] text-muted-foreground/70 mt-1 max-w-xs">
-                        Assim que o cliente interagir pelo WhatsApp com a IA Paola, as mensagens aparecerão aqui em tempo real.
+                <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5 scrollbar-slim">
+                  {isMensagensLoading ? (
+                    [0, 1, 2].map((i) => <div key={i} className="omni-skeleton h-16 w-[70%]" />)
+                  ) : mensagens.length === 0 ? (
+                    <div className="omni-empty m-auto">
+                      <span className="omni-empty__art">
+                        <MessageSquare />
+                      </span>
+                      <h4>Nenhuma mensagem ainda</h4>
+                      <p>
+                        Quando o cliente responder pelo WhatsApp, a conversa aparece aqui
+                        automaticamente.
                       </p>
                     </div>
                   ) : (
@@ -954,340 +956,394 @@ function LeadDetailPage() {
                         <div
                           key={msg.mensagem_id}
                           className={cn(
-                            "flex flex-col max-w-[82%] rounded-2xl p-3.5 text-xs shadow-md transition-all",
+                            "flex max-w-[82%] flex-col rounded-lg border p-3 text-xs",
                             isCliente
-                              ? "bg-[#181838] border border-white/10 text-foreground self-start rounded-tl-xs"
+                              ? "self-start border-line bg-surface-2"
                               : isIA
-                              ? "bg-[#fba834]/15 border border-[#fba834]/35 text-foreground self-end rounded-tr-xs"
-                              : "bg-blue-500/15 border border-blue-500/35 text-foreground self-end rounded-tr-xs"
+                                ? "self-end border-primary-soft bg-primary-soft"
+                                : "self-end border-info-soft bg-info-soft",
                           )}
                         >
-                          <div className="flex items-center justify-between gap-3 text-[10px] font-extrabold mb-1.5 pb-1 border-b border-white/5">
-                            <span className={cn(
-                              "flex items-center gap-1.5",
-                              isCliente ? "text-slate-300" : isIA ? "text-accent" : "text-blue-400"
-                            )}>
-                              {isCliente && <User className="size-3 text-slate-400" />}
-                              {isIA && <Bot className="size-3 text-accent" />}
-                              {!isCliente && !isIA && <UserCheck className="size-3 text-blue-400" />}
-                              {isCliente ? (lead.lead_nome || "Cliente") : isIA ? "Paola · IA Omni" : "Atendente Humano"}
+                          <div className="mb-1.5 flex items-center justify-between gap-3 border-b border-line-subtle pb-1">
+                            <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-label text-ink-2">
+                              {isCliente && <User className="size-3" />}
+                              {isIA && <Bot className="size-3" />}
+                              {!isCliente && !isIA && <UserCheck className="size-3" />}
+                              {isCliente
+                                ? lead.lead_nome || "Cliente"
+                                : isIA
+                                  ? "Paola · IA Omni"
+                                  : "Atendente"}
                             </span>
-                            <span className="text-muted-foreground font-normal">
+                            <span className="num text-2xs text-ink-3">
                               {formatDateTime(msg.criado_em)}
                             </span>
                           </div>
-                          <p className="whitespace-pre-wrap leading-relaxed text-[12px]">{msg.mensagem_conteudo}</p>
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                            {msg.mensagem_conteudo}
+                          </p>
                         </div>
                       );
                     })
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* ══════ ABA 2: TAREFAS DO LEAD ══════ */}
+            {/* ══════ Aba 2: tarefas ══════ */}
             {activeTab === "tarefas" && (
-              <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-5 animate-in fade-in duration-200">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+              <section className="omni-card">
+                <div className="omni-card__header">
                   <div>
-                    <h3 className="text-base font-extrabold text-foreground flex items-center gap-2">
-                      <CheckSquare className="size-5 text-accent" /> Tarefas & Atividades
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Follow-ups, reuniões e pendências comerciais vinculadas a este lead
-                    </p>
+                    <h2 className="omni-h4">Tarefas e follow-ups</h2>
+                    <p className="omni-small mt-0.5">Pendências vinculadas a este negócio</p>
                   </div>
-
                   <button
                     type="button"
                     onClick={() => setShowNewTaskForm((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all"
+                    className="omni-btn omni-btn--secondary omni-btn--sm"
                   >
-                    <Plus className="size-4" /> {showNewTaskForm ? "Fechar Formulário" : "Nova Tarefa"}
+                    <Plus /> {showNewTaskForm ? "Fechar formulário" : "Nova tarefa"}
                   </button>
                 </div>
 
-                {/* Formulário de criação de tarefa */}
                 {showNewTaskForm && (
-                  <div className="rounded-xl border border-accent/40 bg-secondary/40 p-4 space-y-3 animate-in fade-in duration-200">
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-accent flex items-center gap-1.5">
-                      <Plus className="size-3.5" /> Adicionar Tarefa
-                    </h4>
-                    <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-4">
-                      <div className="md:col-span-2">
-                        <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Título da Tarefa *</label>
-                        <input
-                          value={tarefaTitulo}
-                          onChange={(e) => setTarefaTitulo(e.target.value)}
-                          placeholder="Ex: Ligar para confirmar proposta, Enviar contrato..."
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60"
-                          autoFocus
-                        />
+                  <div className="omni-card__body border-b border-line-subtle">
+                    <div className="omni-card omni-card--inset">
+                      <div className="omni-card__body grid gap-4 md:grid-cols-4">
+                        <div className="omni-field md:col-span-2">
+                          <label className="omni-label" htmlFor="nova-tarefa-titulo">
+                            Título da tarefa <span className="omni-req">*</span>
+                          </label>
+                          <input
+                            id="nova-tarefa-titulo"
+                            value={tarefaTitulo}
+                            onChange={(e) => {
+                              setTarefaTitulo(e.target.value);
+                              if (e.target.value.trim()) setTarefaTituloInvalido(false);
+                            }}
+                            aria-invalid={tarefaTituloInvalido || undefined}
+                            placeholder="Ex.: Ligar para confirmar a proposta"
+                            className="omni-input"
+                            autoFocus
+                          />
+                          {tarefaTituloInvalido && (
+                            <p className="omni-error">
+                              Descreva a tarefa em uma frase para poder salvá-la.
+                            </p>
+                          )}
+                        </div>
+                        <div className="omni-field">
+                          <label className="omni-label" htmlFor="nova-tarefa-data">
+                            Vencimento
+                          </label>
+                          <input
+                            id="nova-tarefa-data"
+                            type="date"
+                            value={tarefaVencimento}
+                            onChange={(e) => setTarefaVencimento(e.target.value)}
+                            className="omni-input num"
+                          />
+                        </div>
+                        <div className="omni-field">
+                          <label className="omni-label" htmlFor="nova-tarefa-prioridade">
+                            Prioridade
+                          </label>
+                          <select
+                            id="nova-tarefa-prioridade"
+                            value={tarefaPrioridade}
+                            onChange={(e) => setTarefaPrioridade(e.target.value as any)}
+                            className="omni-select"
+                          >
+                            <option value="baixa">Baixa</option>
+                            <option value="media">Média</option>
+                            <option value="alta">Alta</option>
+                            <option value="urgente">Urgente</option>
+                          </select>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Data de Vencimento</label>
-                        <input
-                          type="date"
-                          value={tarefaVencimento}
-                          onChange={(e) => setTarefaVencimento(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs text-foreground outline-none focus:border-accent/60 cursor-pointer"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-muted-foreground mb-1">Prioridade</label>
-                        <select
-                          value={tarefaPrioridade}
-                          onChange={(e) => setTarefaPrioridade(e.target.value as any)}
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs text-foreground outline-none focus:border-accent/60 cursor-pointer font-semibold"
+                      <div className="omni-card__footer">
+                        <button
+                          type="button"
+                          onClick={() => setShowNewTaskForm(false)}
+                          className="omni-btn omni-btn--ghost omni-btn--sm"
                         >
-                          <option value="baixa">Baixa</option>
-                          <option value="media">Média</option>
-                          <option value="alta">Alta</option>
-                          <option value="urgente">Urgente</option>
-                        </select>
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!tarefaTitulo.trim()) {
+                              setTarefaTituloInvalido(true);
+                              toast.error("Informe o título da tarefa!");
+                              return;
+                            }
+                            addTarefaMutation.mutate({
+                              titulo: tarefaTitulo,
+                              data_vencimento: tarefaVencimento,
+                              prioridade: tarefaPrioridade,
+                            });
+                          }}
+                          disabled={addTarefaMutation.isPending}
+                          data-loading={addTarefaMutation.isPending ? "true" : undefined}
+                          className="omni-btn omni-btn--primary omni-btn--sm"
+                        >
+                          Salvar tarefa
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowNewTaskForm(false)}
-                        className="rounded-xl border border-border bg-white/5 px-4 py-1.5 text-xs font-bold text-muted-foreground hover:bg-white/10"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!tarefaTitulo.trim()) {
-                            toast.error("Informe o título da tarefa!");
-                            return;
-                          }
-                          addTarefaMutation.mutate({
-                            titulo: tarefaTitulo,
-                            data_vencimento: tarefaVencimento,
-                            prioridade: tarefaPrioridade,
-                          });
-                        }}
-                        disabled={addTarefaMutation.isPending || !tarefaTitulo.trim()}
-                        className="rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-1.5 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all disabled:opacity-50"
-                      >
-                        {addTarefaMutation.isPending ? "Salvando..." : "Salvar Tarefa"}
-                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* Lista de tarefas */}
-                {tarefas.length === 0 ? (
-                  <div className="py-12 text-center space-y-2">
-                    <CheckSquare className="size-10 mx-auto text-muted-foreground/30" />
-                    <p className="text-sm font-semibold text-muted-foreground">
-                      Nenhuma tarefa pendente para este lead.
-                    </p>
-                    <p className="text-xs text-muted-foreground/60">
-                      Clique no botão "+ Nova Tarefa" acima para agendar follow-ups e lembretes.
+                {isTarefasLoading ? (
+                  <div className="omni-card__body flex flex-col gap-2">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="omni-skeleton h-row w-full" />
+                    ))}
+                  </div>
+                ) : tarefas.length === 0 ? (
+                  <div className="omni-empty">
+                    <span className="omni-empty__art">
+                      <CheckSquare />
+                    </span>
+                    <h4>Nenhuma tarefa neste negócio</h4>
+                    <p>
+                      Use "Nova tarefa" para agendar o próximo follow-up e não perder o timing da
+                      negociação.
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-border/50 rounded-xl border border-border/70 overflow-hidden bg-secondary/20">
+                  <div className="omni-list">
                     {tarefas.map((t) => {
                       const isDone = t.status === "concluida";
-                      const prio = prioridadeMap[t.prioridade] || prioridadeMap["media"];
+                      const prio = PRIORIDADE_MAP[t.prioridade] || PRIORIDADE_MAP.media;
 
                       return (
-                        <div
-                          key={t.tarefa_id}
-                          className={cn(
-                            "flex items-center justify-between gap-3 p-4 transition-colors group",
-                            isDone ? "bg-white/[0.01] opacity-60" : "hover:bg-white/[0.03]"
-                          )}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => toggleTarefaStatusMutation.mutate(t)}
-                              className="text-muted-foreground hover:text-accent transition-colors shrink-0"
-                              title={isDone ? "Marcar como pendente" : "Marcar como concluída"}
+                        <div key={t.tarefa_id} className="omni-list__item group">
+                          <button
+                            type="button"
+                            onClick={() => toggleTarefaStatusMutation.mutate(t)}
+                            className="shrink-0 rounded-xs text-ink-faint transition-colors hover:text-success"
+                            title={isDone ? "Reabrir tarefa" : "Marcar como concluída"}
+                          >
+                            {isDone ? (
+                              <CheckCircle2 className="size-5 text-success" />
+                            ) : (
+                              <Square className="size-5" />
+                            )}
+                            <span className="omni-sr">
+                              {isDone ? "Reabrir" : "Concluir"} {t.titulo}
+                            </span>
+                          </button>
+
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={cn(
+                                "truncate text-sm font-medium text-ink",
+                                isDone && "text-ink-3 line-through",
+                              )}
                             >
-                              {isDone ? (
-                                <CheckCircle2 className="size-5 text-emerald-400" />
-                              ) : (
-                                <Square className="size-5 hover:border-accent" />
-                              )}
-                            </button>
-                            <div className="min-w-0">
-                              <p className={cn("text-xs font-semibold text-foreground leading-snug", isDone && "line-through text-muted-foreground")}>
-                                {t.titulo}
-                              </p>
-                              {t.descricao && (
-                                <p className="text-[11px] text-muted-foreground truncate">{t.descricao}</p>
-                              )}
-                            </div>
+                              {t.titulo}
+                            </p>
+                            {t.descricao && <p className="omni-small truncate">{t.descricao}</p>}
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0">
-                            {t.data_vencimento && (
-                              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                <CalendarDays className="size-3.5 text-accent" /> {formatDateOnly(t.data_vencimento)}
-                              </span>
-                            )}
-
-                            <span className={cn("inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold", prio.cls)}>
-                              {prio.label}
+                          {t.data_vencimento && (
+                            <span className="num omni-small flex shrink-0 items-center gap-1">
+                              <CalendarDays className="size-3.5" />{" "}
+                              {formatDateOnly(t.data_vencimento)}
                             </span>
+                          )}
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (confirm(`Excluir a tarefa "${t.titulo}"?`)) {
+                          <span className={cn("omni-badge shrink-0", prio.badge)}>
+                            {prio.label}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Excluir a tarefa "${t.titulo}"?`)) {
                                 deleteTarefaMutation.mutate(t.tarefa_id);
                               }
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:bg-red-500/15 rounded-lg transition-all"
-                            title="Excluir tarefa"
+                            className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm shrink-0 text-danger hover:bg-danger-soft"
+                            title={`Excluir ${t.titulo}`}
                           >
-                            <Trash2 className="size-3.5" />
+                            <Trash2 />
+                            <span className="omni-sr">Excluir {t.titulo}</span>
                           </button>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
 
-          {/* ══════ ABA 3: ANOTAÇÕES INTERNAS ══════ */}
-          {activeTab === "anotacoes" && (
-            <div className="rounded-2xl border border-border bg-card/90 p-6 backdrop-blur-2xl shadow-xl space-y-6 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between border-b border-border pb-4">
-                <div>
-                  <h3 className="text-base font-extrabold text-foreground flex items-center gap-2">
-                    <StickyNote className="size-5 text-accent" /> Anotações Internas
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Notas estratégicas, alinhamentos de escopo e histórico de negociação
-                  </p>
+            {/* ══════ Aba 3: anotações ══════ */}
+            {activeTab === "anotacoes" && (
+              <section className="omni-card">
+                <div className="omni-card__header">
+                  <div>
+                    <h2 className="omni-h4">Anotações internas</h2>
+                    <p className="omni-small mt-0.5">
+                      Combinados, escopo e histórico da negociação
+                    </p>
+                  </div>
+                  <span className="omni-badge omni-badge--outline">
+                    {anotacoes.length} {anotacoes.length === 1 ? "anotação" : "anotações"}
+                  </span>
                 </div>
-                <span className="rounded-lg bg-secondary px-3 py-1 text-xs font-bold text-muted-foreground border border-border">
-                  {anotacoes.length} {anotacoes.length === 1 ? "anotação" : "anotações"}
-                </span>
-              </div>
 
-              {/* Campo para criar nova anotação */}
-              <div className="rounded-xl border border-border/80 bg-secondary/30 p-4 space-y-3">
-                <textarea
-                  value={anotacaoTexto}
-                  onChange={(e) => setAnotacaoTexto(e.target.value)}
-                  placeholder="Escreva uma nova anotação sobre este negócio (ex: cliente pediu desconto de 10% no plano anual, reunião remarcada para quinta-feira...)"
-                  rows={3}
-                  className="w-full rounded-xl border border-input bg-background/80 p-3.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60 resize-none"
-                  autoFocus
-                />
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!anotacaoTexto.trim()) return;
-                      addAnotacaoMutation.mutate(anotacaoTexto);
-                    }}
-                    disabled={addAnotacaoMutation.isPending || !anotacaoTexto.trim()}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all disabled:opacity-50"
-                  >
-                    <Plus className="size-4" />
-                    {addAnotacaoMutation.isPending ? "Salvando..." : "Salvar Anotação"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Lista de anotações registradas */}
-              {anotacoes.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <StickyNote className="size-8 mx-auto text-muted-foreground/30" />
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    Nenhuma anotação registrada ainda para este lead.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2">
-                  {anotacoes.map((note) => (
-                    <div
-                      key={note.anotacao_id}
-                      className="flex flex-col justify-between rounded-xl border border-border/70 bg-secondary/40 p-4 shadow-sm hover:border-accent/40 transition-all group"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-[11px] text-muted-foreground border-b border-border/40 pb-2">
-                          <span className="font-semibold text-accent flex items-center gap-1">
-                            <User className="size-3" /> {note.autor_nome || "Omni"}
-                          </span>
-                          <span>{formatDateTime(note.criado_em)}</span>
-                        </div>
-                        <p className="whitespace-pre-wrap text-xs text-foreground leading-relaxed">
-                          {note.conteudo}
-                        </p>
-                      </div>
-                      <div className="mt-3 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity border-t border-border/40 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm("Tem certeza que deseja excluir esta anotação?")) {
-                              deleteAnotacaoMutation.mutate(note.anotacao_id);
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-red-400 hover:bg-red-500/15 transition-colors"
-                        >
-                          <Trash2 className="size-3" /> Excluir
-                        </button>
-                      </div>
+                <div className="omni-card__body omni-stack">
+                  <div className="omni-field">
+                    <label className="omni-label" htmlFor="nova-anotacao">
+                      Nova anotação
+                    </label>
+                    <textarea
+                      id="nova-anotacao"
+                      value={anotacaoTexto}
+                      onChange={(e) => setAnotacaoTexto(e.target.value)}
+                      placeholder="Ex.: cliente pediu 10% de desconto no plano anual; reunião remarcada para quinta."
+                      rows={3}
+                      className="omni-textarea"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!anotacaoTexto.trim()) return;
+                          addAnotacaoMutation.mutate(anotacaoTexto);
+                        }}
+                        disabled={addAnotacaoMutation.isPending || !anotacaoTexto.trim()}
+                        data-loading={addAnotacaoMutation.isPending ? "true" : undefined}
+                        className="omni-btn omni-btn--primary omni-btn--sm"
+                      >
+                        <Plus /> Salvar anotação
+                      </button>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
 
+                {anotacoes.length === 0 ? (
+                  <div className="omni-empty">
+                    <span className="omni-empty__art">
+                      <StickyNote />
+                    </span>
+                    <h4>Nenhuma anotação ainda</h4>
+                    <p>
+                      Registre o que foi combinado na conversa para o time inteiro chegar junto na
+                      próxima interação.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="omni-card__body grid gap-3 border-t border-line-subtle md:grid-cols-2">
+                    {anotacoes.map((note) => (
+                      <article
+                        key={note.anotacao_id}
+                        className="omni-card omni-card--inset group flex flex-col justify-between"
+                      >
+                        <div className="omni-card__body p-4">
+                          <div className="flex items-center justify-between gap-2 border-b border-line-subtle pb-2">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
+                              <User className="size-3" /> {note.autor_nome || "Omni"}
+                            </span>
+                            <span className="num omni-small">{formatDateTime(note.criado_em)}</span>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                            {note.conteudo}
+                          </p>
+                        </div>
+                        <div className="flex justify-end px-4 pb-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm("Tem certeza que deseja excluir esta anotação?")) {
+                                deleteAnotacaoMutation.mutate(note.anotacao_id);
+                              }
+                            }}
+                            className="omni-btn omni-btn--quiet omni-btn--sm text-danger opacity-0 transition-opacity group-hover:opacity-100"
+                          >
+                            <Trash2 /> Excluir
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </div>
       </div>
-    </div>
 
       {/* Modal de Motivo de Perda */}
       {isLossModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#12122d]/95 backdrop-blur-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-extrabold text-destructive flex items-center gap-2">
-                <XCircle className="size-5" /> Registrar Motivo da Perda
-              </h3>
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-perda-lead"
+        >
+          <div className="omni-modal">
+            <div className="omni-modal__header">
+              <div>
+                <h2 id="titulo-modal-perda-lead" className="omni-h4">
+                  Registrar motivo da perda
+                </h2>
+                <p className="omni-small mt-1">
+                  O motivo escolhido alimenta o diagnóstico de gargalos em Relatórios.
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsLossModalOpen(false)}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10"
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
               >
-                <X className="size-4" />
+                <X />
+                <span className="omni-sr">Fechar</span>
               </button>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Selecione o motivo pelo qual este negócio não foi fechado para qualificar os relatórios:
-            </p>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {motivosPerda
-                .filter((m) => m.motivo_ativo)
-                .map((m) => (
-                  <button
-                    key={m.motivo_id}
-                    type="button"
-                    onClick={() => {
-                      updateMutation.mutate({
-                        lead_status: "Perdido",
-                        motivo_perda_id: m.motivo_id,
-                      });
-                      setIsLossModalOpen(false);
-                    }}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left text-xs font-bold text-foreground hover:border-accent hover:bg-accent/10 transition-all"
-                  >
-                    {m.motivo_nome}
-                  </button>
-                ))}
+
+            <div className="omni-modal__body">
+              {motivosPerda.filter((m) => m.motivo_ativo).length === 0 ? (
+                <div className="omni-empty">
+                  <h4>Nenhum motivo cadastrado</h4>
+                  <p>Cadastre os motivos de perda em Configurações para poder classificar aqui.</p>
+                </div>
+              ) : (
+                <div className="omni-stack-2 max-h-60 overflow-y-auto scrollbar-slim">
+                  {motivosPerda
+                    .filter((m) => m.motivo_ativo)
+                    .map((m) => (
+                      <button
+                        key={m.motivo_id}
+                        type="button"
+                        onClick={() => {
+                          updateMutation.mutate({
+                            lead_status: "Perdido",
+                            motivo_perda_id: m.motivo_id,
+                          });
+                          setIsLossModalOpen(false);
+                        }}
+                        className="w-full rounded-md border border-line bg-surface p-3 text-left text-sm font-medium text-ink transition-colors duration-[var(--omni-dur-fast)] hover:border-primary hover:bg-primary-soft"
+                      >
+                        {m.motivo_nome}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="omni-modal__footer">
+              <button
+                type="button"
+                onClick={() => setIsLossModalOpen(false)}
+                className="omni-btn omni-btn--ghost"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

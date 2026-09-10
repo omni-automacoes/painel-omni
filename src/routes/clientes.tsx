@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -10,7 +10,6 @@ import {
   Building2,
   Phone,
   Mail,
-  Calendar,
   DollarSign,
   TrendingUp,
   CreditCard,
@@ -18,11 +17,7 @@ import {
   Trash2,
   X,
   ExternalLink,
-  MessageCircle,
-  Clock,
-  Sparkles,
   Download,
-  AlertCircle,
   FileText,
   UserCheck,
 } from "lucide-react";
@@ -73,6 +68,14 @@ const fmtDate = (d?: string | null) => {
   return d;
 };
 
+/* Situação do contrato: cor sempre acompanhada de rótulo em texto. */
+const STATUS_MAP: Record<Cliente["status"], { label: string; badge: string }> = {
+  ativo: { label: "Ativo", badge: "omni-badge--success" },
+  inadimplente: { label: "Inadimplente", badge: "omni-badge--danger" },
+  pausado: { label: "Pausado", badge: "omni-badge--warning" },
+  cancelado: { label: "Cancelado", badge: "omni-badge--outline" },
+};
+
 /* ─── Modal Form Component ─── */
 interface ClienteModalProps {
   open: boolean;
@@ -94,17 +97,27 @@ function ClienteModal({ open, onClose, cliente, onSaved }: ClienteModalProps) {
   const [segmento, setSegmento] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [nomeInvalido, setNomeInvalido] = useState(false);
 
   useMemo(() => {
     if (!open) return;
+    setNomeInvalido(false);
     if (cliente) {
       setNome(cliente.nome || "");
       setEmpresa(cliente.empresa || "");
       setTelefone(cliente.telefone || "");
       setEmail(cliente.email || "");
       setDocumento(cliente.documento || "");
-      setValorContrato(Number(cliente.valor_contrato || 0).toFixed(2).replace(".", ","));
-      setValorRecorrente(Number(cliente.valor_recorrente || 0).toFixed(2).replace(".", ","));
+      setValorContrato(
+        Number(cliente.valor_contrato || 0)
+          .toFixed(2)
+          .replace(".", ","),
+      );
+      setValorRecorrente(
+        Number(cliente.valor_recorrente || 0)
+          .toFixed(2)
+          .replace(".", ","),
+      );
       setDiaVencimento(cliente.dia_vencimento || 5);
       setStatus(cliente.status || "ativo");
       setSegmento(cliente.segmento || "");
@@ -127,7 +140,12 @@ function ClienteModal({ open, onClose, cliente, onSaved }: ClienteModalProps) {
   const numVal = (str: string) => parseFloat(str.replace(/\./g, "").replace(",", ".")) || 0;
 
   const handleSave = async () => {
-    if (!nome.trim()) { toast.error("Informe o nome do cliente!"); return; }
+    if (!nome.trim()) {
+      setNomeInvalido(true);
+      toast.error("Informe o nome do cliente!");
+      return;
+    }
+    setNomeInvalido(false);
     setSaving(true);
     try {
       const payload: Partial<Cliente> = {
@@ -152,9 +170,7 @@ function ClienteModal({ open, onClose, cliente, onSaved }: ClienteModalProps) {
         if (error) throw error;
         toast.success("Cliente atualizado com sucesso!");
       } else {
-        const { error } = await supabase
-          .from("clientes")
-          .insert([payload]);
+        const { error } = await supabase.from("clientes").insert([payload]);
         if (error) throw error;
         toast.success("Cliente cadastrado com sucesso!");
       }
@@ -171,149 +187,195 @@ function ClienteModal({ open, onClose, cliente, onSaved }: ClienteModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#12122d]/95 backdrop-blur-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+    <div
+      className="omni-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-modal-cliente"
+    >
+      <div className="omni-modal w-full max-w-[620px]">
+        <div className="omni-modal__header">
           <div>
-            <h2 className="text-base font-extrabold text-foreground">
-              {cliente ? "Editar Cliente" : "Novo Cliente"}
+            <h2 id="titulo-modal-cliente" className="omni-h4">
+              {cliente ? "Editar cliente" : "Novo cliente"}
             </h2>
-            <p className="text-xs text-muted-foreground">
-              Ficha cadastral e dados contratuais do cliente
-            </p>
+            <p className="omni-small mt-1">Ficha cadastral e dados do contrato</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-white/10 transition-colors">
-            <X className="size-4" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+          >
+            <X />
+            <span className="omni-sr">Fechar</span>
           </button>
         </div>
 
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Nome do Cliente / Contato *</label>
+        <div className="omni-modal__body omni-stack max-h-[70vh] overflow-y-auto scrollbar-slim">
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="cliente-nome">
+              Nome do cliente ou contato <span className="omni-req">*</span>
+            </label>
             <input
+              id="cliente-nome"
               value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Dra. Livia / Grupo Auctus"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+              onChange={(e) => {
+                setNome(e.target.value);
+                if (e.target.value.trim()) setNomeInvalido(false);
+              }}
+              aria-invalid={nomeInvalido || undefined}
+              placeholder="Ex.: Dra. Livia / Grupo Auctus"
+              className="omni-input"
             />
+            {nomeInvalido && (
+              <p className="omni-error">Digite o nome do cliente para poder salvar a ficha.</p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Empresa / Razão Social</label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-empresa">
+                Empresa / razão social
+              </label>
               <input
+                id="cliente-empresa"
                 value={empresa}
                 onChange={(e) => setEmpresa(e.target.value)}
-                placeholder="Ex: Auctus Tecnologia Ltda"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                placeholder="Ex.: Auctus Tecnologia Ltda"
+                className="omni-input"
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Segmento / Nicho</label>
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-segmento">
+                Segmento
+              </label>
               <input
+                id="cliente-segmento"
                 value={segmento}
                 onChange={(e) => setSegmento(e.target.value)}
-                placeholder="Ex: Saúde / E-commerce / SaaS"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                placeholder="Ex.: Saúde, e-commerce, SaaS"
+                className="omni-input"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">WhatsApp / Telefone</label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-telefone">
+                WhatsApp / telefone
+              </label>
               <input
+                id="cliente-telefone"
                 value={telefone}
                 onChange={(e) => setTelefone(e.target.value)}
-                placeholder="Ex: 5512999999999"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                placeholder="Ex.: 5512999999999"
+                className="omni-input"
               />
+              <p className="omni-hint">Use DDI + DDD, sem espaços, para abrir a conversa direto.</p>
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">E-mail</label>
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-email">
+                E-mail
+              </label>
               <input
+                id="cliente-email"
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="contato@cliente.com"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Valor Contrato (R$)</label>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-contrato">
+                Valor do contrato (R$)
+              </label>
               <input
+                id="cliente-contrato"
                 value={valorContrato}
                 onChange={(e) => setValorContrato(e.target.value)}
                 placeholder="0,00"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input num"
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Mensalidade (MRR)</label>
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-mrr">
+                Mensalidade (R$)
+              </label>
               <input
+                id="cliente-mrr"
                 value={valorRecorrente}
                 onChange={(e) => setValorRecorrente(e.target.value)}
                 placeholder="0,00"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60"
+                className="omni-input num"
               />
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Dia Vencimento</label>
+            <div className="omni-field">
+              <label className="omni-label" htmlFor="cliente-vencimento">
+                Dia do vencimento
+              </label>
               <select
+                id="cliente-vencimento"
                 value={diaVencimento}
                 onChange={(e) => setDiaVencimento(Number(e.target.value))}
-                className="w-full rounded-xl border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-white outline-none focus:border-accent/60 cursor-pointer"
+                className="omni-select"
               >
                 {[1, 5, 10, 15, 20, 25, 28, 30].map((d) => (
-                  <option key={d} value={d}>Todo dia {d}</option>
+                  <option key={d} value={d}>
+                    Todo dia {d}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Status do Cliente</label>
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="cliente-status">
+              Situação do cliente
+            </label>
             <select
+              id="cliente-status"
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
-              className="w-full rounded-xl border border-white/10 bg-[#12122d] px-3 py-2 text-xs text-white outline-none focus:border-accent/60 cursor-pointer"
+              className="omni-select"
             >
-              <option value="ativo">Ativo (Em dia / Operando)</option>
-              <option value="inadimplente">Inadimplente (Fatura em atraso)</option>
-              <option value="pausado">Pausado (Temporariamente suspenso)</option>
-              <option value="cancelado">Cancelado (Contrato encerrado)</option>
+              <option value="ativo">Ativo — em dia e operando</option>
+              <option value="inadimplente">Inadimplente — fatura em atraso</option>
+              <option value="pausado">Pausado — temporariamente suspenso</option>
+              <option value="cancelado">Cancelado — contrato encerrado</option>
             </select>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Observações / Notas Internas</label>
+          <div className="omni-field">
+            <label className="omni-label" htmlFor="cliente-obs">
+              Observações internas
+            </label>
             <textarea
+              id="cliente-obs"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               rows={3}
-              placeholder="Detalhes dos serviços contratados, escopo, acessos..."
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-accent/60 resize-none"
+              placeholder="Escopo contratado, acessos, combinados com o cliente…"
+              className="omni-textarea"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-muted-foreground hover:bg-white/10 transition-all"
-          >
+        <div className="omni-modal__footer">
+          <button type="button" onClick={onClose} className="omni-btn omni-btn--ghost">
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-5 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all disabled:opacity-50"
+            data-loading={saving ? "true" : undefined}
+            className="omni-btn omni-btn--primary"
           >
-            {saving ? "Salvando..." : cliente ? "Salvar Alterações" : "Cadastrar Cliente"}
+            {cliente ? "Salvar alterações" : "Cadastrar cliente"}
           </button>
         </div>
       </div>
@@ -351,9 +413,12 @@ function ClientesPage() {
   const kpis = useMemo(() => {
     const total = clientes.length;
     const ativos = clientes.filter((c) => c.status === "ativo").length;
-    const mrr = clientes.reduce((acc, c) => acc + (c.status === "ativo" ? Number(c.valor_recorrente || 0) : 0), 0);
+    const mrr = clientes.reduce(
+      (acc, c) => acc + (c.status === "ativo" ? Number(c.valor_recorrente || 0) : 0),
+      0,
+    );
     const totalContratos = clientes.reduce((acc, c) => acc + Number(c.valor_contrato || 0), 0);
-    const ticketMedio = ativos > 0 ? (mrr / ativos) : 0;
+    const ticketMedio = ativos > 0 ? mrr / ativos : 0;
     return { total, ativos, mrr, totalContratos, ticketMedio };
   }, [clientes]);
 
@@ -388,8 +453,22 @@ function ClientesPage() {
   };
 
   const exportCSV = () => {
-    if (filtered.length === 0) { toast.error("Nenhum cliente para exportar."); return; }
-    const headers = ["Nome", "Empresa", "Telefone", "Email", "Valor Contrato", "MRR (Mensalidade)", "Dia Vencimento", "Status", "Segmento", "Data Início"];
+    if (filtered.length === 0) {
+      toast.error("Nenhum cliente para exportar.");
+      return;
+    }
+    const headers = [
+      "Nome",
+      "Empresa",
+      "Telefone",
+      "Email",
+      "Valor Contrato",
+      "MRR (Mensalidade)",
+      "Dia Vencimento",
+      "Status",
+      "Segmento",
+      "Data Início",
+    ];
     const rows = filtered.map((c) => [
       `"${(c.nome || "").replace(/"/g, '""')}"`,
       `"${(c.empresa || "").replace(/"/g, '""')}"`,
@@ -414,180 +493,209 @@ function ClientesPage() {
     toast.success("CSV exportado com sucesso!");
   };
 
-  const statusMap: Record<string, { label: string; cls: string }> = {
-    ativo: { label: "Ativo", cls: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30" },
-    inadimplente: { label: "Inadimplente", cls: "text-red-400 bg-red-500/15 border-red-500/30" },
-    pausado: { label: "Pausado", cls: "text-amber-400 bg-amber-500/15 border-amber-500/30" },
-    cancelado: { label: "Cancelado", cls: "text-slate-400 bg-slate-500/15 border-slate-500/30" },
-  };
+  const temFiltro = search.trim().length > 0 || statusFilter !== "todos";
 
   return (
     <AppShell
-      title="Carteira de Clientes"
-      subtitle="Gestão de clientes fechados, contratos e recorrência ativa (MRR)"
+      title="Carteira de clientes"
+      subtitle="Contratos fechados, mensalidades e situação de cada cliente"
       actions={
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={exportCSV}
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/80 px-3.5 py-2 text-xs font-bold text-foreground hover:bg-secondary hover:border-accent/40 transition-all"
+            className="omni-btn omni-btn--secondary omni-btn--sm"
           >
-            <Download className="size-4 text-accent" /> Exportar
+            <Download /> Exportar CSV
           </button>
           <button
             type="button"
-            onClick={() => { setEditingCliente(null); setModalOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#fba834] to-[#f7931e] px-4 py-2 text-xs font-bold text-[#0d0d26] shadow-md shadow-[#fba834]/20 hover:brightness-110 transition-all"
+            onClick={() => {
+              setEditingCliente(null);
+              setModalOpen(true);
+            }}
+            className="omni-btn omni-btn--primary omni-btn--sm"
           >
-            <Plus className="size-4" /> Novo Cliente
+            <Plus /> Novo cliente
           </button>
         </div>
       }
     >
-      <div className="w-full space-y-6">
+      <div className="omni-stack-6 w-full">
+        {/* ══════ 1. Indicadores da carteira ══════ */}
 
-        {/* ══════ 1. CARDS DE KPIS DA CARTEIRA ══════ */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-emerald-500/20 bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                <UserCheck className="size-4" /> Clientes Ativos
+        <section className="omni-grid omni-grid-4" aria-label="Indicadores da carteira">
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <UserCheck className="size-3.5" /> Clientes ativos
               </span>
-              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400"><Users className="size-4" /></span>
+              <p className="omni-stat__value">{kpis.ativos}</p>
+              <p className="omni-stat__foot">
+                <Users className="size-3.5" /> {kpis.total} no histórico total
+              </p>
             </div>
-            <p className="text-2xl font-extrabold text-foreground">{kpis.ativos}</p>
-            <p className="text-xs text-muted-foreground">
-              {kpis.total} clientes no histórico total
-            </p>
           </div>
 
-          <div className="rounded-2xl border border-accent/30 bg-gradient-to-br from-card to-accent/10 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-1.5">
-                <TrendingUp className="size-4" /> MRR (Recorrência)
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <TrendingUp className="size-3.5" /> MRR da carteira
               </span>
-              <span className="rounded-lg bg-accent/20 px-2 py-1 text-[10px] font-bold text-accent">Mensal</span>
+              <p className="omni-stat__value">{fmtCurrency(kpis.mrr)}</p>
+              <p className="omni-stat__foot">Receita mensal garantida por contrato</p>
             </div>
-            <p className="text-2xl font-extrabold text-accent">{fmtCurrency(kpis.mrr)}</p>
-            <p className="text-xs text-muted-foreground">
-              Receita mensal garantida por contratos
-            </p>
           </div>
 
-          <div className="rounded-2xl border border-blue-500/20 bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
-                <FileText className="size-4" /> Total em Contratos
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <FileText className="size-3.5" /> Total em contratos
               </span>
-              <span className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400"><DollarSign className="size-4" /></span>
+              <p className="omni-stat__value">{fmtCurrency(kpis.totalContratos)}</p>
+              <p className="omni-stat__foot">
+                <DollarSign className="size-3.5" /> Projetos e implantações fechadas
+              </p>
             </div>
-            <p className="text-2xl font-extrabold text-foreground">{fmtCurrency(kpis.totalContratos)}</p>
-            <p className="text-xs text-muted-foreground">
-              Soma de projetos e setups fechados
-            </p>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card/90 p-5 backdrop-blur-2xl shadow-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <CreditCard className="size-4 text-accent" /> Ticket Médio MRR
+          <div className="omni-card">
+            <div className="omni-stat">
+              <span className="omni-stat__label flex items-center gap-1.5">
+                <CreditCard className="size-3.5" /> Ticket médio
               </span>
-              <span className="p-1.5 rounded-lg bg-white/5 text-muted-foreground"><Clock className="size-4" /></span>
+              <p className="omni-stat__value">{fmtCurrency(kpis.ticketMedio)}</p>
+              <p className="omni-stat__foot">Mensalidade média por cliente ativo</p>
             </div>
-            <p className="text-2xl font-extrabold text-foreground">{fmtCurrency(kpis.ticketMedio)}</p>
-            <p className="text-xs text-muted-foreground">
-              Média por cliente ativo
-            </p>
+          </div>
+        </section>
+
+        {/* ══════ 2. Busca e filtros ══════ */}
+
+        <div className="omni-card">
+          <div className="omni-card__body flex flex-wrap items-end gap-4 py-4">
+            <div className="omni-field min-w-[240px] flex-1">
+              <label className="omni-label" htmlFor="busca-cliente">
+                Buscar cliente
+              </label>
+              <div className="omni-input-group">
+                <Search />
+                <input
+                  id="busca-cliente"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Nome, empresa, telefone ou segmento"
+                  className="omni-input"
+                />
+              </div>
+            </div>
+
+            <div className="omni-field w-full sm:w-56">
+              <label className="omni-label" htmlFor="filtro-status">
+                Situação
+              </label>
+              <select
+                id="filtro-status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="omni-select"
+              >
+                <option value="todos">Todas as situações</option>
+                <option value="ativo">Apenas ativos</option>
+                <option value="inadimplente">Inadimplentes</option>
+                <option value="pausado">Pausados</option>
+                <option value="cancelado">Cancelados</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* ══════ 2. BARRA DE BUSCA E FILTROS ══════ */}
-        <div className="rounded-2xl border border-border bg-card/90 p-4 backdrop-blur-2xl shadow-xl flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por cliente, empresa, telefone ou segmento..."
-              className="h-10 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent/60"
-            />
-          </div>
+        {/* ══════ 3. Tabela de clientes ══════ */}
 
-          <div className="flex items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 rounded-xl border border-input bg-background px-3 text-xs font-semibold text-foreground outline-none focus:border-accent/60 cursor-pointer"
-            >
-              <option value="todos">Todos os Status</option>
-              <option value="ativo">Apenas Ativos</option>
-              <option value="inadimplente">Inadimplentes</option>
-              <option value="pausado">Pausados</option>
-              <option value="cancelado">Cancelados</option>
-            </select>
-          </div>
-        </div>
-
-        {/* ══════ 3. TABELA DE CLIENTES ══════ */}
-        <section className="overflow-hidden rounded-2xl border border-border bg-card/90 backdrop-blur-2xl shadow-xl">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <section className="omni-table-wrap">
+          <div className="omni-card__header">
             <div>
-              <h3 className="text-base font-extrabold text-foreground">
-                Clientes Cadastrados ({filtered.length})
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Lista consolidada de clientes vindos do CRM e contratos diretos
-              </p>
+              <h2 className="omni-h4">Clientes cadastrados</h2>
+              <p className="omni-small mt-0.5">Vindos do funil comercial e de cadastro direto</p>
             </div>
           </div>
 
-          {isLoading ? (
-            <div className="py-16 text-center text-muted-foreground text-sm">Carregando carteira de clientes...</div>
-          ) : filtered.length === 0 ? (
-            <div className="py-16 text-center space-y-2">
-              <Users className="size-10 mx-auto text-muted-foreground/30" />
-              <p className="text-sm font-semibold text-muted-foreground">Nenhum cliente encontrado com os filtros atuais</p>
-              <p className="text-xs text-muted-foreground/60">
-                Quando um Lead for marcado como "Ganho" no quadro de Negócios, ele virará um cliente automaticamente!
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+          <div className="omni-table-scroll">
+            <table className="omni-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Contato</th>
+                  <th className="omni-th-num">Contrato</th>
+                  <th className="omni-th-num">Mensalidade</th>
+                  <th className="omni-th-num">Vencimento</th>
+                  <th>Situação</th>
+                  <th>Origem</th>
+                  <th className="omni-th-num">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  [0, 1, 2, 3, 4, 5].map((i) => (
+                    <tr key={i}>
+                      <td colSpan={8} className="p-0">
+                        <div className="omni-skeleton h-row w-full rounded-none" />
+                      </td>
+                    </tr>
+                  ))
+                ) : filtered.length === 0 ? (
                   <tr>
-                    <th className="px-5 py-3.5">Cliente</th>
-                    <th className="px-5 py-3.5">Contato</th>
-                    <th className="px-5 py-3.5">Contrato Inicial</th>
-                    <th className="px-5 py-3.5">Recorrência (MRR)</th>
-                    <th className="px-5 py-3.5">Dia Venc.</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5">Origem CRM</th>
-                    <th className="px-5 py-3.5 text-right">Ações</th>
+                    <td colSpan={8} className="p-0">
+                      <div className="omni-empty">
+                        <span className="omni-empty__art">
+                          <Users />
+                        </span>
+                        <h4>
+                          {temFiltro
+                            ? "Nenhum cliente com esses filtros"
+                            : "Nenhum cliente cadastrado"}
+                        </h4>
+                        <p>
+                          {temFiltro
+                            ? "Limpe a busca ou escolha “Todas as situações” para ver a carteira inteira."
+                            : "Cadastre um cliente aqui, ou marque um negócio como ganho no funil para ele entrar na carteira."}
+                        </p>
+                        {!temFiltro && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCliente(null);
+                              setModalOpen(true);
+                            }}
+                            className="omni-btn omni-btn--secondary omni-btn--sm"
+                          >
+                            <Plus /> Cadastrar cliente
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {filtered.map((c) => {
-                    const st = statusMap[c.status] || statusMap["ativo"];
+                ) : (
+                  filtered.map((c) => {
+                    const st = STATUS_MAP[c.status] || STATUS_MAP.ativo;
                     const cleanPhone = (c.telefone || "").replace(/\D/g, "");
-                    const isAtivo = c.status === "ativo";
 
                     return (
-                      <tr key={c.cliente_id} className="hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent font-extrabold text-xs">
+                      <tr key={c.cliente_id} className="group">
+                        <td>
+                          <div className="omni-user">
+                            <span className="omni-avatar" aria-hidden="true">
                               {c.nome.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-foreground text-xs leading-snug">{c.nome}</p>
+                            </span>
+                            <div className="min-w-0">
+                              <p className="omni-user__name truncate">{c.nome}</p>
                               {c.empresa && (
-                                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <p className="omni-user__meta flex items-center gap-1 truncate">
                                   <Building2 className="size-3" /> {c.empresa}
                                 </p>
                               )}
                               {c.segmento && (
-                                <span className="inline-block mt-0.5 rounded px-1.5 py-0.2 text-[10px] font-semibold bg-white/5 text-muted-foreground">
+                                <span className="omni-badge omni-badge--outline mt-1">
                                   {c.segmento}
                                 </span>
                               )}
@@ -595,98 +703,109 @@ function ClientesPage() {
                           </div>
                         </td>
 
-                        <td className="px-5 py-3.5">
+                        <td>
                           {c.telefone ? (
                             <a
                               href={`https://wa.me/${cleanPhone}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs text-foreground hover:text-accent font-medium transition-colors"
+                              className="omni-link num inline-flex items-center gap-1.5"
                             >
-                              <Phone className="size-3 text-emerald-400" />
+                              <Phone className="size-3" />
                               {c.telefone}
                             </a>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-ink-faint">—</span>
                           )}
                           {c.email && (
-                            <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <p className="omni-small mt-0.5 flex items-center gap-1 truncate">
                               <Mail className="size-3" /> {c.email}
                             </p>
                           )}
                         </td>
 
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs font-bold text-foreground">
-                            {fmtCurrency(c.valor_contrato)}
-                          </span>
-                        </td>
+                        <td className="omni-td-num">{fmtCurrency(c.valor_contrato)}</td>
 
-                        <td className="px-5 py-3.5">
-                          <span className={cn("text-xs font-extrabold", Number(c.valor_recorrente) > 0 ? "text-accent" : "text-muted-foreground")}>
-                            {fmtCurrency(c.valor_recorrente)}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            Todo dia {c.dia_vencimento || 5}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex items-center gap-1 rounded-lg border px-2.5 py-0.5 text-[10px] font-bold", st.cls)}>
-                            {isAtivo && <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                            {st.label}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-3.5">
-                          {c.lead_id ? (
-                            <Link
-                              to="/negocios"
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
-                            >
-                              <ExternalLink className="size-3" /> Ver no Funil
-                            </Link>
+                        <td className="omni-td-num">
+                          {Number(c.valor_recorrente) > 0 ? (
+                            <span className="font-semibold">{fmtCurrency(c.valor_recorrente)}</span>
                           ) : (
-                            <span className="text-[11px] text-muted-foreground">Cadastro Direto</span>
+                            <span className="text-ink-faint">—</span>
                           )}
                         </td>
 
-                        <td className="px-5 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <td className="omni-td-num">Dia {c.dia_vencimento || 5}</td>
+
+                        <td>
+                          <span className={cn("omni-badge", st.badge)}>{st.label}</span>
+                        </td>
+
+                        <td>
+                          {c.lead_id ? (
+                            <Link
+                              to="/negocios"
+                              className="omni-link inline-flex items-center gap-1"
+                            >
+                              <ExternalLink className="size-3" /> Funil
+                            </Link>
+                          ) : (
+                            <span className="omni-small">Cadastro direto</span>
+                          )}
+                        </td>
+
+                        <td className="omni-td-actions">
+                          <div className="inline-flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => { setEditingCliente(c); setModalOpen(true); }}
-                              className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
-                              title="Editar Cliente"
+                              onClick={() => {
+                                setEditingCliente(c);
+                                setModalOpen(true);
+                              }}
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                              title={`Editar ${c.nome}`}
                             >
-                              <Edit2 className="size-4" />
+                              <Edit2 />
+                              <span className="omni-sr">Editar {c.nome}</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => excluirCliente(c)}
-                              className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/15 transition-colors"
-                              title="Excluir Cliente"
+                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+                              title={`Excluir ${c.nome}`}
                             >
-                              <Trash2 className="size-4" />
+                              <Trash2 />
+                              <span className="omni-sr">Excluir {c.nome}</span>
                             </button>
                           </div>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="omni-table__foot">
+            <span>
+              {filtered.length} de {clientes.length}{" "}
+              {clientes.length === 1 ? "cliente" : "clientes"}
+            </span>
+            {filtered.length > 0 && (
+              <span className="num">
+                Início do contrato mais recente: {fmtDate(filtered[0]?.data_inicio_contrato)}
+              </span>
+            )}
+          </div>
         </section>
       </div>
 
       <ClienteModal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingCliente(null); }}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingCliente(null);
+        }}
         cliente={editingCliente}
         onSaved={() => {
           queryClient.invalidateQueries({ queryKey: ["clientes"] });

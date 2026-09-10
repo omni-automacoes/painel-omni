@@ -1,0 +1,461 @@
+/* =========================================================================
+   OMNI DESIGN SYSTEM — Tokens
+   Fonte da verdade de cor, tipografia, espaçamento, raio, elevação e motion.
+   Versão 1.0 · Montserrat · tema claro (padrão) + escuro
+   -------------------------------------------------------------------------
+   Como usar:
+     <link rel="stylesheet" href="css/omni-tokens.css">
+     <link rel="stylesheet" href="css/omni-components.css">
+   Regra de ouro: componentes NUNCA usam hex direto. Sempre var(--omni-*).
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   1. RAMPAS DE MARCA (valores brutos, iguais nos dois temas)
+   ------------------------------------------------------------------------- */
+:root {
+  /* Indigo — derivado do Navy da marca (#272757 = indigo-850) */
+  --omni-indigo-50:  #f4f4fb;
+  --omni-indigo-100: #e9e9f6;
+  --omni-indigo-200: #d0d0ec;
+  --omni-indigo-300: #b0b0de;
+  --omni-indigo-400: #8b8bd0;
+  --omni-indigo-500: #6161c2;
+  --omni-indigo-600: #4646b8;
+  --omni-indigo-700: #363691;
+  --omni-indigo-800: #2f2f6f;
+  --omni-indigo-850: #272757; /* NAVY DA MARCA */
+  --omni-indigo-900: #1e1e46;
+  --omni-indigo-950: #15152f;
+
+  /* Sky — derivado do Riviera da marca (#63b4d8 = sky-400) */
+  --omni-sky-50:  #f2f9fd;
+  --omni-sky-100: #e5f4fa;
+  --omni-sky-200: #c9e6f3;
+  --omni-sky-300: #9fd2e8;
+  --omni-sky-400: #63b4d8; /* RIVIERA DA MARCA */
+  --omni-sky-500: #3ba0cb;
+  --omni-sky-600: #1189c0;
+  --omni-sky-700: #176e94;
+  --omni-sky-800: #175874;
+  --omni-sky-900: #144154;
+  --omni-sky-950: #0e2b38;
+
+  /* Amber — derivado do Laranja da marca (#fba834 = amber-400) */
+  --omni-amber-50:  #fef9f0;
+  --omni-amber-100: #fdf1dd;
+  --omni-amber-200: #fbe0b3;
+  --omni-amber-300: #fcc86f;
+  --omni-amber-400: #fba834; /* LARANJA DA MARCA */
+  --omni-amber-500: #ef9310;
+  --omni-amber-600: #d98a12;
+  --omni-amber-700: #a86a12;
+  --omni-amber-800: #7d5013;
+  --omni-amber-900: #573912;
+  --omni-amber-950: #3a260c;
+
+  /* Slate — derivado do Titânio da marca (#565f6b = slate-700) */
+  --omni-slate-50:  #f7f8fa;
+  --omni-slate-100: #eef0f4;
+  --omni-slate-200: #e0e3ea;
+  --omni-slate-300: #ccd1da;
+  --omni-slate-400: #a3abb9;
+  --omni-slate-500: #7f8897;
+  --omni-slate-600: #6b7484;
+  --omni-slate-700: #565f6b; /* TITÂNIO DA MARCA */
+  --omni-slate-800: #3f4753;
+  --omni-slate-850: #2e353f;
+  --omni-slate-900: #1f242e;
+  --omni-slate-950: #141922;
+
+  /* Apoio semântico */
+  --omni-green-100: #e4f6ec;
+  --omni-green-300: #7fd3aa;
+  --omni-green-500: #2a9d67;
+  --omni-green-600: #17985c;
+  --omni-green-700: #1a7a50;
+  --omni-green-900: #10402c;
+
+  --omni-red-100: #fdeaeb;
+  --omni-red-300: #f0a3a8;
+  --omni-red-500: #d9505a;
+  --omni-red-600: #c72933;
+  --omni-red-700: #a01f28;
+  --omni-red-900: #4c1418;
+
+  --omni-violet-500: #a855c9;
+  --omni-violet-600: #a466cf;
+  --omni-teal-500:   #0e9594;
+  --omni-teal-600:   #12a09d;
+}
+
+/* -------------------------------------------------------------------------
+   2. TOKENS SEMÂNTICOS — TEMA CLARO (padrão)
+   ------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  /* Superfícies */
+  --omni-bg:            #f7f8fa;
+  --omni-bg-subtle:     #eef0f4;
+  --omni-surface:       #ffffff;
+  --omni-surface-2:     #f7f8fa;
+  --omni-surface-3:     #eef0f4;
+  --omni-surface-inset: #f2f4f7;
+  --omni-overlay:       rgba(20, 25, 34, 0.45);
+
+  /* Bordas */
+  --omni-border:        #e3e6ec;
+  --omni-border-subtle: #eef0f4;
+  --omni-border-strong: #ccd1da;
+
+  /* Texto */
+  --omni-text:          #1a2030;
+  --omni-text-2:        #565f6b;
+  --omni-text-3:        #6b7484;
+  --omni-text-faint:    #98a1b0;
+  --omni-text-inverse:  #ffffff;
+  --omni-text-link:     #363691;
+
+  /* Ação primária — Navy da marca */
+  --omni-primary:        #272757;
+  --omni-primary-hover:  #33336e;
+  --omni-primary-active: #1e1e46;
+  --omni-primary-fg:     #ffffff;
+  --omni-primary-soft:   #eeeef8;
+  --omni-primary-soft-fg:#363691;
+  --omni-primary-ring:   rgba(54, 54, 145, 0.30);
+
+  /* Acento — Laranja da marca (uso raro: CTA e destaque) */
+  --omni-accent:         #fba834;
+  --omni-accent-hover:   #ef9310;
+  --omni-accent-active:  #d98a12;
+  --omni-accent-fg:      #3a260c; /* texto escuro: branco sobre laranja reprova AA */
+  --omni-accent-soft:    #fdf1dd;
+  --omni-accent-soft-fg: #a86a12;
+
+  /* Status */
+  --omni-success:      #1a7a50;
+  --omni-success-soft: #e4f6ec;
+  --omni-success-fg:   #14603f;
+  --omni-warning:      #a86a12;
+  --omni-warning-soft: #fdf1dd;
+  --omni-warning-fg:   #7d5013;
+  --omni-danger:       #c72933;
+  --omni-danger-hover: #a01f28;
+  --omni-danger-soft:  #fdeaeb;
+  --omni-danger-fg:    #a01f28;
+  --omni-info:         #1189c0;
+  --omni-info-soft:    #e5f4fa;
+  --omni-info-fg:      #176e94;
+
+  /* Foco */
+  --omni-focus: #4646b8;
+
+  /* Elevação — deliberadamente discreta; a borda é o separador principal */
+  --omni-shadow-xs: 0 1px 2px rgba(26, 32, 48, 0.04);
+  --omni-shadow-sm: 0 1px 2px rgba(26, 32, 48, 0.05), 0 1px 3px rgba(26, 32, 48, 0.04);
+  --omni-shadow-md: 0 2px 4px rgba(26, 32, 48, 0.05), 0 6px 16px rgba(26, 32, 48, 0.07);
+  --omni-shadow-lg: 0 8px 24px rgba(26, 32, 48, 0.10), 0 2px 6px rgba(26, 32, 48, 0.05);
+
+  /* Gráficos — paleta categórica validada (Δ CVD e contraste conferidos) */
+  --omni-chart-1: #4646b8; /* indigo   — marca */
+  --omni-chart-2: #d98a12; /* âmbar    — marca */
+  --omni-chart-3: #1189c0; /* riviera  — marca */
+  --omni-chart-4: #2a9d67; /* verde */
+  --omni-chart-5: #a855c9; /* violeta */
+  --omni-chart-6: #c72933; /* vermelho */
+  --omni-chart-7: #0e9594; /* teal */
+  --omni-chart-grid: #eef0f4;
+  --omni-chart-axis: #ccd1da;
+  --omni-chart-surface: #ffffff;
+
+  /* Rampa sequencial (magnitude contínua) — hue único indigo */
+  --omni-seq-1: #e9e9f6;
+  --omni-seq-2: #c4c4e6;
+  --omni-seq-3: #9494d3;
+  --omni-seq-4: #6161c2;
+  --omni-seq-5: #4646b8;
+  --omni-seq-6: #363691;
+  --omni-seq-7: #272757;
+
+  /* Rampa divergente (polaridade) — âmbar ← neutro → indigo */
+  --omni-div-neg-2: #d98a12;
+  --omni-div-neg-1: #fbe0b3;
+  --omni-div-mid:   #e3e6ec;
+  --omni-div-pos-1: #b0b0de;
+  --omni-div-pos-2: #4646b8;
+}
+
+/* -------------------------------------------------------------------------
+   3. TOKENS SEMÂNTICOS — TEMA ESCURO
+   Definido em dois escopos: preferência do SO e escolha explícita do usuário.
+   ------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --omni-bg:            #0b0f1a;
+    --omni-bg-subtle:     #0f1421;
+    --omni-surface:       #121826;
+    --omni-surface-2:     #18202f;
+    --omni-surface-3:     #1e2739;
+    --omni-surface-inset: #0e131f;
+    --omni-overlay:       rgba(5, 8, 14, 0.65);
+
+    --omni-border:        #242e42;
+    --omni-border-subtle: #1a2231;
+    --omni-border-strong: #35415a;
+
+    --omni-text:          #e9edf4;
+    --omni-text-2:        #a6b0c2;
+    --omni-text-3:        #8b95a8;
+    --omni-text-faint:    #6b7688;
+    --omni-text-inverse:  #0b0f1a;
+    --omni-text-link:     #b0b0de;
+
+    --omni-primary:        #6161c2;
+    --omni-primary-hover:  #7373cd;
+    --omni-primary-active: #4646b8;
+    --omni-primary-fg:     #ffffff;
+    --omni-primary-soft:   #1d2140;
+    --omni-primary-soft-fg:#b0b0de;
+    --omni-primary-ring:   rgba(139, 139, 208, 0.40);
+
+    --omni-accent:         #fba834;
+    --omni-accent-hover:   #fcc86f;
+    --omni-accent-active:  #ef9310;
+    --omni-accent-fg:      #2a1a05;
+    --omni-accent-soft:    #33240d;
+    --omni-accent-soft-fg: #fcc86f;
+
+    --omni-success:      #17985c;
+    --omni-success-soft: #10281f;
+    --omni-success-fg:   #7fd3aa;
+    --omni-warning:      #d98a12;
+    --omni-warning-soft: #2e2109;
+    --omni-warning-fg:   #fcc86f;
+    --omni-danger:       #d9505a;
+    --omni-danger-hover: #e4737b;
+    --omni-danger-soft:  #2e1418;
+    --omni-danger-fg:    #f0a3a8;
+    --omni-info:         #3ba0cb;
+    --omni-info-soft:    #0f2836;
+    --omni-info-fg:      #9fd2e8;
+
+    --omni-focus: #8b8bd0;
+
+    --omni-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --omni-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+    --omni-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.40), 0 6px 16px rgba(0, 0, 0, 0.45);
+    --omni-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.40);
+
+    --omni-chart-1: #6a6ad4;
+    --omni-chart-2: #bd811a;
+    --omni-chart-3: #2f93c6;
+    --omni-chart-4: #17985c;
+    --omni-chart-5: #a466cf;
+    --omni-chart-6: #d9505a;
+    --omni-chart-7: #12a09d;
+    --omni-chart-grid: #1e2739;
+    --omni-chart-axis: #35415a;
+    --omni-chart-surface: #121826;
+
+    --omni-seq-1: #1d2140;
+    --omni-seq-2: #2b2f63;
+    --omni-seq-3: #3a3e88;
+    --omni-seq-4: #4d4faa;
+    --omni-seq-5: #6161c2;
+    --omni-seq-6: #8b8bd0;
+    --omni-seq-7: #b0b0de;
+
+    --omni-div-neg-2: #bd811a;
+    --omni-div-neg-1: #573912;
+    --omni-div-mid:   #2e353f;
+    --omni-div-pos-1: #3a3e88;
+    --omni-div-pos-2: #6a6ad4;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --omni-bg:            #0b0f1a;
+  --omni-bg-subtle:     #0f1421;
+  --omni-surface:       #121826;
+  --omni-surface-2:     #18202f;
+  --omni-surface-3:     #1e2739;
+  --omni-surface-inset: #0e131f;
+  --omni-overlay:       rgba(5, 8, 14, 0.65);
+
+  --omni-border:        #242e42;
+  --omni-border-subtle: #1a2231;
+  --omni-border-strong: #35415a;
+
+  --omni-text:          #e9edf4;
+  --omni-text-2:        #a6b0c2;
+  --omni-text-3:        #8b95a8;
+  --omni-text-faint:    #6b7688;
+  --omni-text-inverse:  #0b0f1a;
+  --omni-text-link:     #b0b0de;
+
+  --omni-primary:        #6161c2;
+  --omni-primary-hover:  #7373cd;
+  --omni-primary-active: #4646b8;
+  --omni-primary-fg:     #ffffff;
+  --omni-primary-soft:   #1d2140;
+  --omni-primary-soft-fg:#b0b0de;
+  --omni-primary-ring:   rgba(139, 139, 208, 0.40);
+
+  --omni-accent:         #fba834;
+  --omni-accent-hover:   #fcc86f;
+  --omni-accent-active:  #ef9310;
+  --omni-accent-fg:      #2a1a05;
+  --omni-accent-soft:    #33240d;
+  --omni-accent-soft-fg: #fcc86f;
+
+  --omni-success:      #17985c;
+  --omni-success-soft: #10281f;
+  --omni-success-fg:   #7fd3aa;
+  --omni-warning:      #d98a12;
+  --omni-warning-soft: #2e2109;
+  --omni-warning-fg:   #fcc86f;
+  --omni-danger:       #d9505a;
+  --omni-danger-hover: #e4737b;
+  --omni-danger-soft:  #2e1418;
+  --omni-danger-fg:    #f0a3a8;
+  --omni-info:         #3ba0cb;
+  --omni-info-soft:    #0f2836;
+  --omni-info-fg:      #9fd2e8;
+
+  --omni-focus: #8b8bd0;
+
+  --omni-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --omni-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --omni-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.40), 0 6px 16px rgba(0, 0, 0, 0.45);
+  --omni-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.40);
+
+  --omni-chart-1: #6a6ad4;
+  --omni-chart-2: #bd811a;
+  --omni-chart-3: #2f93c6;
+  --omni-chart-4: #17985c;
+  --omni-chart-5: #a466cf;
+  --omni-chart-6: #d9505a;
+  --omni-chart-7: #12a09d;
+  --omni-chart-grid: #1e2739;
+  --omni-chart-axis: #35415a;
+  --omni-chart-surface: #121826;
+
+  --omni-seq-1: #1d2140;
+  --omni-seq-2: #2b2f63;
+  --omni-seq-3: #3a3e88;
+  --omni-seq-4: #4d4faa;
+  --omni-seq-5: #6161c2;
+  --omni-seq-6: #8b8bd0;
+  --omni-seq-7: #b0b0de;
+
+  --omni-div-neg-2: #bd811a;
+  --omni-div-neg-1: #573912;
+  --omni-div-mid:   #2e353f;
+  --omni-div-pos-1: #3a3e88;
+  --omni-div-pos-2: #6a6ad4;
+}
+
+/* -------------------------------------------------------------------------
+   4. TIPOGRAFIA
+   Família única: Montserrat. Hierarquia por peso, tamanho e tracking.
+   ------------------------------------------------------------------------- */
+:root {
+  --omni-font: "Montserrat", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --omni-font-mono: "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+
+  --omni-text-2xs: 0.6875rem; /* 11px — micro rótulos */
+  --omni-text-xs:  0.75rem;   /* 12px — legendas, meta */
+  --omni-text-sm:  0.8125rem; /* 13px — texto denso, tabela */
+  --omni-text-base:0.875rem;  /* 14px — padrão de interface */
+  --omni-text-md:  1rem;      /* 16px — corpo de leitura */
+  --omni-text-lg:  1.125rem;  /* 18px — subtítulo */
+  --omni-text-xl:  1.25rem;   /* 20px — título de seção */
+  --omni-text-2xl: 1.5rem;    /* 24px — título de página */
+  --omni-text-3xl: 1.875rem;  /* 30px — KPI grande */
+  --omni-text-4xl: 2.5rem;    /* 40px — display */
+  --omni-text-5xl: 3.5rem;    /* 56px — hero */
+
+  --omni-weight-light:     300;
+  --omni-weight-regular:   400;
+  --omni-weight-medium:    500;
+  --omni-weight-semibold:  600;
+  --omni-weight-bold:      700;
+  --omni-weight-extrabold: 800;
+
+  --omni-leading-tight:   1.15;
+  --omni-leading-snug:    1.3;
+  --omni-leading-normal:  1.5;
+  --omni-leading-relaxed: 1.65;
+
+  --omni-tracking-tight:  -0.02em;
+  --omni-tracking-snug:   -0.01em;
+  --omni-tracking-normal: 0;
+  --omni-tracking-wide:   0.04em;
+  --omni-tracking-label:  0.08em; /* rótulos em caixa alta */
+}
+
+/* -------------------------------------------------------------------------
+   5. ESPAÇAMENTO, RAIO, TAMANHOS E MOTION
+   Grade base de 4px. Densidade: confortável.
+   ------------------------------------------------------------------------- */
+:root {
+  --omni-space-0: 0;
+  --omni-space-1: 0.25rem;  /*  4 */
+  --omni-space-2: 0.5rem;   /*  8 */
+  --omni-space-3: 0.75rem;  /* 12 */
+  --omni-space-4: 1rem;     /* 16 */
+  --omni-space-5: 1.25rem;  /* 20 */
+  --omni-space-6: 1.5rem;   /* 24 */
+  --omni-space-8: 2rem;     /* 32 */
+  --omni-space-10: 2.5rem;  /* 40 */
+  --omni-space-12: 3rem;    /* 48 */
+  --omni-space-16: 4rem;    /* 64 */
+  --omni-space-20: 5rem;    /* 80 */
+  --omni-space-24: 6rem;    /* 96 */
+
+  --omni-radius-xs:   4px;
+  --omni-radius-sm:   6px;
+  --omni-radius-md:   8px;
+  --omni-radius-lg:   10px; /* padrão de cards e campos */
+  --omni-radius-xl:   14px;
+  --omni-radius-2xl:  20px;
+  --omni-radius-full: 999px;
+
+  --omni-control-sm: 32px;
+  --omni-control-md: 38px; /* padrão */
+  --omni-control-lg: 44px;
+  --omni-row-height: 44px; /* linha de tabela — densidade confortável */
+  --omni-sidebar-w:  248px;
+  --omni-topbar-h:   60px;
+  --omni-container:  1240px;
+  --omni-prose:      68ch;
+
+  --omni-border-width: 1px;
+
+  --omni-dur-fast: 120ms;
+  --omni-dur-base: 180ms;
+  --omni-dur-slow: 280ms;
+  --omni-ease: cubic-bezier(0.2, 0, 0.13, 1);
+  --omni-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --omni-z-base: 1;
+  --omni-z-sticky: 100;
+  --omni-z-dropdown: 200;
+  --omni-z-overlay: 300;
+  --omni-z-modal: 310;
+  --omni-z-toast: 400;
+  --omni-z-tooltip: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --omni-dur-fast: 1ms;
+    --omni-dur-base: 1ms;
+    --omni-dur-slow: 1ms;
+  }
+}

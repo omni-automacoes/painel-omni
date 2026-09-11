@@ -114,7 +114,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR" className="dark" data-theme="dark">
+    <html lang="pt-BR" className="light" data-theme="light">
       <head>
         <HeadContent />
       </head>
@@ -165,7 +165,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="omni-theme">
+      <ThemeProvider defaultTheme="light" storageKey="omni-theme">
         <AuthProvider>
           <AuthShield>
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}

@@ -1,44 +1,43 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/components/AuthProvider";
 import {
+  AlertCircle,
   ArrowDownLeft,
   ArrowUpRight,
-  Plus,
-  Search,
-  Download,
-  Calendar,
-  DollarSign,
+  CalendarClock,
   CheckCircle2,
-  Clock,
-  AlertCircle,
-  Pencil,
-  Trash2,
-  X,
-  Building2,
-  TrendingUp,
-  TrendingDown,
-  RefreshCw,
-  Layers,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Download,
   Info,
+  Layers,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Wallet,
+  X,
 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
-  Legend,
+  Cell,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { AppShell } from "@/components/AppShell";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+import { AppShell } from "@/components/AppShell";
+import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/financeiro")({
   head: () => ({
@@ -46,14 +45,14 @@ export const Route = createFileRoute("/financeiro")({
       { title: "Financeiro · Omni Automações" },
       {
         name: "description",
-        content: "Controle de receitas e despesas empresariais da Omni Automações.",
+        content: "Fluxo de caixa mensal, contas a pagar e a receber da Omni Automações.",
       },
     ],
   }),
   component: Financeiro,
 });
 
-/* ─── Types ─── */
+/* ─── Tipos ─── */
 export type TipoReceita = "pontual" | "recorrente";
 export type StatusReceita = "pendente" | "recebido" | "atrasado" | "cancelado";
 export type TipoDespesa = "pontual" | "recorrente" | "parcelada";
@@ -113,25 +112,44 @@ interface FinanceiroItem {
   raw: Receita | Despesa;
 }
 
-/* ─── Constantes de Meses ─── */
-const MESES = [
-  { idx: 0, abrev: "Jan", nome: "Janeiro" },
-  { idx: 1, abrev: "Fev", nome: "Fevereiro" },
-  { idx: 2, abrev: "Mar", nome: "Março" },
-  { idx: 3, abrev: "Abr", nome: "Abril" },
-  { idx: 4, abrev: "Mai", nome: "Maio" },
-  { idx: 5, abrev: "Jun", nome: "Junho" },
-  { idx: 6, abrev: "Jul", nome: "Julho" },
-  { idx: 7, abrev: "Ago", nome: "Agosto" },
-  { idx: 8, abrev: "Set", nome: "Setembro" },
-  { idx: 9, abrev: "Out", nome: "Outubro" },
-  { idx: 10, abrev: "Nov", nome: "Novembro" },
-  { idx: 11, abrev: "Dez", nome: "Dezembro" },
+/*
+ * Situação exibida na tela. O banco só grava "pendente" — nada nunca vira
+ * "atrasado" sozinho —, então o atraso é calculado aqui comparando o
+ * vencimento com a data de hoje. Sem isso, conta vencida fica invisível.
+ */
+type Situacao = "liquidado" | "aberto" | "atrasado" | "cancelado";
+
+/* ─── Constantes ─── */
+const MESES_NOME = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
 ];
 
-const ANOS_DISPONIVEIS = [2024, 2025, 2026, 2027];
+const MESES_ABREV = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
 
-/* ─── Categorias ─── */
 const CATEGORIAS_RECEITA = [
   "Sites e Landing Pages",
   "SaaS / Recorrência",
@@ -150,36 +168,48 @@ const CATEGORIAS_DESPESA = [
   "Outros",
 ];
 
-/* Situação do lançamento: cor sempre acompanhada de rótulo e ícone. */
-const STATUS_CONFIG: Record<string, { label: string; badge: string; icon: React.ReactNode }> = {
-  recebido: { label: "Recebido", badge: "omni-badge--success", icon: <CheckCircle2 /> },
-  pago: { label: "Pago", badge: "omni-badge--success", icon: <CheckCircle2 /> },
-  pendente: { label: "Pendente", badge: "omni-badge--warning", icon: <Clock /> },
-  atrasado: { label: "Atrasado", badge: "omni-badge--danger", icon: <AlertCircle /> },
-  cancelado: { label: "Cancelado", badge: "omni-badge--outline", icon: <X /> },
-};
-
 /* ─── Helpers ─── */
 const fmtCurrency = (val: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(val) || 0);
 
-const fmtDate = (d?: string | null) => {
-  if (!d) return "—";
-  try {
-    const parts = d.split("-");
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-  } catch {
-    // fallback
+/* Eixo do gráfico: "R$ 2,5 mil" lê melhor que "R$ 2.500,00" repetido 12 vezes. */
+const fmtCompact = (val: number) => {
+  const n = Number(val) || 0;
+  if (Math.abs(n) >= 1000) {
+    return `R$ ${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
   }
-  return d;
+  return `R$ ${n.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
 };
 
-const todayISO = () => new Date().toISOString().split("T")[0];
+const fmtDate = (d?: string | null) => {
+  if (!d) return "—";
+  const parts = d.split("-");
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : d;
+};
+
+const fmtDiaMes = (d?: string | null) => {
+  if (!d) return "—";
+  const parts = d.split("-");
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d;
+};
+
+/*
+ * Data local, não UTC: `toISOString()` vira o dia seguinte depois das 21h no
+ * fuso do Brasil, o que faria uma conta de hoje aparecer como atrasada.
+ */
+const isoDe = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const todayISO = () => isoDe(new Date());
+
 const firstOfMonthISO = () => {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`;
+};
+
+const addDaysISO = (dateStr: string, days: number) => {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return isoDe(new Date(y, m - 1, d + days));
 };
 
 function addMonthsToDate(dateStr: string, monthsToAdd: number): string {
@@ -187,10 +217,7 @@ function addMonthsToDate(dateStr: string, monthsToAdd: number): string {
     const parts = dateStr.split("-").map(Number);
     if (parts.length === 3) {
       const target = new Date(parts[0], parts[1] - 1 + monthsToAdd, parts[2] || 1);
-      const year = target.getFullYear();
-      const month = String(target.getMonth() + 1).padStart(2, "0");
-      const day = String(target.getDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
+      return isoDe(target);
     }
   } catch {
     // fallback
@@ -198,13 +225,39 @@ function addMonthsToDate(dateStr: string, monthsToAdd: number): string {
   return dateStr;
 }
 
-function tipoLabel(item: FinanceiroItem) {
-  if (item.tipo_lancamento === "receita") {
-    return item.tipo_sub === "recorrente" ? "Recorrente" : "Pontual";
-  }
-  if (item.tipo_sub === "parcelada") return `Parcelada ${item.extra ?? ""}`;
-  if (item.tipo_sub === "recorrente") return "Recorrente";
-  return "Pontual";
+const chaveMes = (ano: number, mes: number) => `${ano}-${String(mes + 1).padStart(2, "0")}`;
+
+function situacaoDe(item: FinanceiroItem, hoje: string): Situacao {
+  if (item.status === "cancelado") return "cancelado";
+  if (item.status === "recebido" || item.status === "pago") return "liquidado";
+  return item.data_vencimento && item.data_vencimento < hoje ? "atrasado" : "aberto";
+}
+
+function rotuloSituacao(item: FinanceiroItem, situacao: Situacao) {
+  if (situacao === "liquidado") return item.tipo_lancamento === "receita" ? "Recebido" : "Pago";
+  if (situacao === "atrasado") return "Atrasado";
+  if (situacao === "cancelado") return "Cancelado";
+  return "Em aberto";
+}
+
+const BADGE_SITUACAO: Record<Situacao, string> = {
+  liquidado: "omni-badge--success",
+  aberto: "omni-badge--warning",
+  atrasado: "omni-badge--danger",
+  cancelado: "omni-badge--outline",
+};
+
+function IconeSituacao({ situacao }: { situacao: Situacao }) {
+  if (situacao === "liquidado") return <CheckCircle2 />;
+  if (situacao === "atrasado") return <AlertCircle />;
+  if (situacao === "cancelado") return <X />;
+  return <Clock />;
+}
+
+function ocorrenciaLabel(item: FinanceiroItem) {
+  if (item.tipo_sub === "recorrente") return "Mensal";
+  if (item.tipo_sub === "parcelada") return `Parcela ${item.extra ?? ""}`.trim();
+  return "Único";
 }
 
 const TOOLTIP_STYLE = {
@@ -826,30 +879,216 @@ function ModalForm({ open, onClose, editingItem, onSaved }: ModalFormProps) {
   );
 }
 
-/* ─── Main Component ─── */
+/* ─── Blocos da página ─── */
+
+function Kpi({
+  label,
+  valor,
+  rodape,
+  icone,
+  tom,
+}: {
+  label: string;
+  valor: string;
+  rodape: React.ReactNode;
+  icone: React.ReactNode;
+  tom?: "positivo" | "negativo";
+}) {
+  return (
+    <div className="omni-card">
+      <div className="omni-stat">
+        <span className="omni-stat__label flex items-center gap-1.5">
+          {icone} {label}
+        </span>
+        <p
+          className={cn(
+            "omni-stat__value num",
+            tom === "positivo" && "text-success",
+            tom === "negativo" && "text-danger",
+          )}
+        >
+          {valor}
+        </p>
+        <p className="omni-stat__foot">{rodape}</p>
+      </div>
+    </div>
+  );
+}
+
+/* Linha compacta dos painéis de atraso e de próximos vencimentos. */
+function LinhaPendencia({
+  item,
+  hoje,
+  onLiquidar,
+}: {
+  item: FinanceiroItem;
+  hoje: string;
+  onLiquidar: (item: FinanceiroItem) => void;
+}) {
+  const isReceita = item.tipo_lancamento === "receita";
+  const dias = Math.round(
+    (new Date(`${item.data_vencimento}T12:00:00`).getTime() -
+      new Date(`${hoje}T12:00:00`).getTime()) /
+      86400000,
+  );
+  const quando = dias === 0 ? "vence hoje" : dias > 0 ? `em ${dias}d` : `há ${Math.abs(dias)}d`;
+
+  return (
+    <li className="flex items-center gap-3 border-b border-line-subtle px-4 py-2.5 last:border-b-0">
+      <span
+        className={cn(
+          "grid size-7 shrink-0 place-items-center rounded-sm",
+          isReceita ? "bg-success-soft text-success" : "bg-danger-soft text-danger",
+        )}
+        aria-hidden="true"
+      >
+        {isReceita ? <ArrowDownLeft className="size-3.5" /> : <ArrowUpRight className="size-3.5" />}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-ink">{item.descricao}</p>
+        <p className="omni-small truncate">
+          {fmtDiaMes(item.data_vencimento)} · {quando}
+          {item.cliente_ou_fornecedor ? ` · ${item.cliente_ou_fornecedor}` : ""}
+        </p>
+      </div>
+
+      <span
+        className={cn(
+          "num shrink-0 text-sm font-semibold",
+          isReceita ? "text-success" : "text-ink",
+        )}
+      >
+        {fmtCurrency(item.valor)}
+      </span>
+
+      <button
+        type="button"
+        onClick={() => onLiquidar(item)}
+        title={isReceita ? "Marcar como recebido" : "Marcar como pago"}
+        className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm shrink-0 text-success hover:bg-success-soft"
+      >
+        <CheckCircle2 />
+        <span className="omni-sr">{isReceita ? "Marcar como recebido" : "Marcar como pago"}</span>
+      </button>
+    </li>
+  );
+}
+
+/* Cartão de lançamento — substitui a tabela abaixo de md. */
+function CardLancamento({
+  item,
+  hoje,
+  onLiquidar,
+  onEditar,
+  onExcluir,
+}: {
+  item: FinanceiroItem;
+  hoje: string;
+  onLiquidar: (item: FinanceiroItem) => void;
+  onEditar: (item: FinanceiroItem) => void;
+  onExcluir: (item: FinanceiroItem) => void;
+}) {
+  const isReceita = item.tipo_lancamento === "receita";
+  const situacao = situacaoDe(item, hoje);
+
+  return (
+    <li className="omni-card p-4">
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            "grid size-8 shrink-0 place-items-center rounded-sm",
+            isReceita ? "bg-success-soft text-success" : "bg-danger-soft text-danger",
+          )}
+          aria-hidden="true"
+        >
+          {isReceita ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{item.descricao}</p>
+          <p className="omni-small truncate">
+            {item.categoria}
+            {item.cliente_ou_fornecedor ? ` · ${item.cliente_ou_fornecedor}` : ""}
+          </p>
+        </div>
+
+        <span
+          className={cn(
+            "num shrink-0 text-sm font-bold",
+            isReceita ? "text-success" : "text-danger",
+          )}
+        >
+          {isReceita ? "+" : "−"}
+          {fmtCurrency(item.valor)}
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className={cn("omni-badge", BADGE_SITUACAO[situacao])}>
+          <IconeSituacao situacao={situacao} /> {rotuloSituacao(item, situacao)}
+        </span>
+        <span className="omni-badge omni-badge--outline">
+          {item.tipo_sub === "recorrente" && <RefreshCw />}
+          {item.tipo_sub === "parcelada" && <Layers />}
+          {ocorrenciaLabel(item)}
+        </span>
+        <span className="omni-small ml-auto">venc. {fmtDate(item.data_vencimento)}</span>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 border-t border-line-subtle pt-3">
+        {situacao !== "liquidado" && situacao !== "cancelado" && (
+          <button
+            type="button"
+            onClick={() => onLiquidar(item)}
+            className="omni-btn omni-btn--secondary omni-btn--sm flex-1"
+          >
+            <CheckCircle2 /> {isReceita ? "Recebi" : "Paguei"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onEditar(item)}
+          className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+          title={`Editar ${item.descricao}`}
+        >
+          <Pencil />
+          <span className="omni-sr">Editar {item.descricao}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onExcluir(item)}
+          className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+          title={`Excluir ${item.descricao}`}
+        >
+          <Trash2 />
+          <span className="omni-sr">Excluir {item.descricao}</span>
+        </button>
+      </div>
+    </li>
+  );
+}
+
+/* ─── Página ─── */
 function Financeiro() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth(); // 0-11
+  const hoje = todayISO();
+  const agora = useMemo(() => new Date(), []);
 
-  /* Estados de Filtro de Mês e Ano */
-  const [selectedYear, setSelectedYear] = useState<number | "todos">(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | "todos">(currentMonth);
-  const [dateBasis, setDateBasis] = useState<"vencimento" | "competencia" | "liquidacao">(
-    "vencimento",
-  );
-
-  /* Estados de Filtro Geral */
-  const [search, setSearch] = useState("");
-  const [filterTipo, setFilterTipo] = useState<"todos" | "receita" | "despesa">("todos");
-  const [filterStatus, setFilterStatus] = useState("todos");
+  /*
+   * Um único estado de período: o mês visível. Sem seletor de ano, sem régua de
+   * meses e sem escolha de base de data — a tela inteira é por data de
+   * vencimento, que é o que a empresa usa no dia a dia.
+   */
+  const [ref, setRef] = useState({ ano: agora.getFullYear(), mes: agora.getMonth() });
+  const [busca, setBusca] = useState("");
+  const [lado, setLado] = useState<"tudo" | "receita" | "despesa">("tudo");
+  const [soAberto, setSoAberto] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FinanceiroItem | null>(null);
 
-  /* Queries com fallback seguro */
   const { data: receitas = [], isLoading: loadingR } = useQuery({
     queryKey: ["receitas"],
     queryFn: async () => {
@@ -884,7 +1123,6 @@ function Financeiro() {
 
   const isLoading = loadingR || loadingD;
 
-  /* Unify into flat list */
   const allItems = useMemo<FinanceiroItem[]>(() => {
     const rs: FinanceiroItem[] = (receitas || []).map((r) => ({
       id: r.receita_id,
@@ -924,205 +1162,188 @@ function Financeiro() {
       raw: d,
     }));
 
-    return [...rs, ...ds].sort((a, b) =>
-      (b.data_vencimento || "").localeCompare(a.data_vencimento || ""),
-    );
+    return [...rs, ...ds];
   }, [receitas, despesas]);
 
-  /* Contador de transações por mês no ano selecionado */
-  const monthCounters = useMemo(() => {
-    const counts: Record<number, number> = {};
-    MESES.forEach((m) => {
-      counts[m.idx] = 0;
-    });
+  const chaveRef = chaveMes(ref.ano, ref.mes);
+  const chaveHoje = hoje.slice(0, 7);
+  const noMesAtual = chaveRef === chaveHoje;
 
-    const targetYear = selectedYear === "todos" ? null : selectedYear;
+  const doMes = useMemo(
+    () => allItems.filter((i) => (i.data_vencimento || "").startsWith(chaveRef)),
+    [allItems, chaveRef],
+  );
 
-    allItems.forEach((i) => {
-      let dateStr = i.data_vencimento;
-      if (dateBasis === "competencia") dateStr = i.data_competencia || i.data_vencimento;
-      else if (dateBasis === "liquidacao") dateStr = i.data_liquidacao || i.data_vencimento;
+  /* Resumo do mês: realizado com o previsto logo abaixo. */
+  const resumo = useMemo(() => {
+    let entrouRealizado = 0;
+    let entrouPrevisto = 0;
+    let saiuRealizado = 0;
+    let saiuPrevisto = 0;
 
-      if (!dateStr) return;
-      const d = new Date(dateStr + "T12:00:00");
-      if (isNaN(d.getTime())) return;
-
-      if (targetYear === null || d.getFullYear() === targetYear) {
-        const m = d.getMonth();
-        counts[m] = (counts[m] || 0) + 1;
-      }
-    });
-
-    return counts;
-  }, [allItems, selectedYear, dateBasis]);
-
-  /* Helper para navegar meses */
-  const handlePrevMonth = () => {
-    if (selectedMonth === "todos") {
-      setSelectedMonth(11);
-      if (typeof selectedYear === "number") setSelectedYear(selectedYear - 1);
-    } else if (selectedMonth === 0) {
-      setSelectedMonth(11);
-      if (typeof selectedYear === "number") setSelectedYear(selectedYear - 1);
-    } else {
-      setSelectedMonth(selectedMonth - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (selectedMonth === "todos") {
-      setSelectedMonth(0);
-      if (typeof selectedYear === "number") setSelectedYear(selectedYear + 1);
-    } else if (selectedMonth === 11) {
-      setSelectedMonth(0);
-      if (typeof selectedYear === "number") setSelectedYear(selectedYear + 1);
-    } else {
-      setSelectedMonth(selectedMonth + 1);
-    }
-  };
-
-  /* Filtro aplicado */
-  const filtered = useMemo(() => {
-    return allItems.filter((item) => {
-      let targetDateStr = item.data_vencimento;
-      if (dateBasis === "competencia") {
-        targetDateStr = item.data_competencia || item.data_vencimento;
-      } else if (dateBasis === "liquidacao") {
-        targetDateStr = item.data_liquidacao || item.data_vencimento;
-      }
-
-      if (targetDateStr) {
-        const d = new Date(targetDateStr + "T12:00:00");
-        if (!isNaN(d.getTime())) {
-          const itemYear = d.getFullYear();
-          const itemMonth = d.getMonth();
-
-          if (selectedYear !== "todos" && itemYear !== Number(selectedYear)) {
-            return false;
-          }
-
-          if (selectedMonth !== "todos" && itemMonth !== Number(selectedMonth)) {
-            return false;
-          }
-        }
-      }
-
-      if (filterTipo !== "todos" && item.tipo_lancamento !== filterTipo) return false;
-      if (filterStatus !== "todos" && item.status !== filterStatus) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const desc = (item.descricao || "").toLowerCase();
-        const cat = (item.categoria || "").toLowerCase();
-        const cli = (item.cliente_ou_fornecedor || "").toLowerCase();
-        if (!desc.includes(q) && !cat.includes(q) && !cli.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [allItems, selectedYear, selectedMonth, dateBasis, filterTipo, filterStatus, search]);
-
-  /* Detecta se existem lançamentos no mês selecionado em outro ano */
-  const otherYearsWithData = useMemo(() => {
-    if (selectedMonth === "todos" || filtered.length > 0) return [];
-    const foundYears = new Set<number>();
-    allItems.forEach((i) => {
-      let dateStr = i.data_vencimento;
-      if (dateBasis === "competencia") dateStr = i.data_competencia || i.data_vencimento;
-      else if (dateBasis === "liquidacao") dateStr = i.data_liquidacao || i.data_vencimento;
-      if (!dateStr) return;
-      const d = new Date(dateStr + "T12:00:00");
-      if (!isNaN(d.getTime())) {
-        if (d.getMonth() === selectedMonth && d.getFullYear() !== selectedYear) {
-          foundYears.add(d.getFullYear());
-        }
-      }
-    });
-    return Array.from(foundYears).sort();
-  }, [allItems, selectedMonth, selectedYear, filtered.length, dateBasis]);
-
-  /* KPIs do período filtrado */
-  const kpis = useMemo(() => {
-    let rRecebido = 0;
-    let rPendente = 0;
-    let dPago = 0;
-    let dPendente = 0;
-
-    filtered.forEach((i) => {
-      const v = Number(i.valor) || 0;
+    doMes.forEach((i) => {
+      const situacao = situacaoDe(i, hoje);
+      if (situacao === "cancelado") return;
       if (i.tipo_lancamento === "receita") {
-        if (i.status === "recebido") rRecebido += v;
-        else if (i.status === "pendente" || i.status === "atrasado") rPendente += v;
+        entrouPrevisto += i.valor;
+        if (situacao === "liquidado") entrouRealizado += i.valor;
       } else {
-        if (i.status === "pago") dPago += v;
-        else if (i.status === "pendente" || i.status === "atrasado") dPendente += v;
-      }
-    });
-    const saldo = rRecebido - dPago;
-    const margem = rRecebido > 0 ? ((saldo / rRecebido) * 100).toFixed(1) : "0";
-    return { rRecebido, rPendente, dPago, dPendente, saldo, margem };
-  }, [filtered]);
-
-  /* Dados do gráfico comparativo */
-  const chartData = useMemo(() => {
-    const map: Record<string, { Receitas: number; Despesas: number }> = {};
-    MESES.forEach((m) => {
-      map[m.abrev] = { Receitas: 0, Despesas: 0 };
-    });
-
-    const targetYear = selectedYear === "todos" ? currentYear : selectedYear;
-
-    allItems.forEach((item) => {
-      if (item.status === "cancelado") return;
-
-      let dateStr = item.data_vencimento;
-      if (dateBasis === "competencia") dateStr = item.data_competencia || item.data_vencimento;
-      else if (dateBasis === "liquidacao") dateStr = item.data_liquidacao || item.data_vencimento;
-
-      if (!dateStr) return;
-      const d = new Date(dateStr + "T12:00:00");
-      if (isNaN(d.getTime())) return;
-      if (d.getFullYear() !== targetYear) return;
-
-      const m = MESES[d.getMonth()].abrev;
-      const v = Number(item.valor) || 0;
-      if (item.tipo_lancamento === "receita" && item.status === "recebido") {
-        map[m].Receitas += v;
-      }
-      if (item.tipo_lancamento === "despesa" && item.status === "pago") {
-        map[m].Despesas += v;
+        saiuPrevisto += i.valor;
+        if (situacao === "liquidado") saiuRealizado += i.valor;
       }
     });
 
-    return MESES.map((m) => ({
-      m: m.abrev,
-      Receitas: Math.round(map[m.abrev].Receitas),
-      Despesas: Math.round(map[m.abrev].Despesas),
+    return {
+      entrouRealizado,
+      entrouPrevisto,
+      saiuRealizado,
+      saiuPrevisto,
+      aReceber: entrouPrevisto - entrouRealizado,
+      aPagar: saiuPrevisto - saiuRealizado,
+      saldoRealizado: entrouRealizado - saiuRealizado,
+      saldoPrevisto: entrouPrevisto - saiuPrevisto,
+    };
+  }, [doMes, hoje]);
+
+  /* Atrasos e próximos vencimentos varrem todos os meses, não só o visível. */
+  const atrasados = useMemo(
+    () =>
+      allItems
+        .filter((i) => situacaoDe(i, hoje) === "atrasado")
+        .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento)),
+    [allItems, hoje],
+  );
+
+  const proximos = useMemo(() => {
+    const limite = addDaysISO(hoje, 7);
+    return allItems
+      .filter((i) => {
+        if (situacaoDe(i, hoje) !== "aberto") return false;
+        return i.data_vencimento >= hoje && i.data_vencimento <= limite;
+      })
+      .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento));
+  }, [allItems, hoje]);
+
+  /* Atraso tem dois lados: o que a empresa deixou de receber e o que deixou
+     de pagar. Somar tudo num número só esconderia metade do problema. */
+  const totalAtrasado = useMemo(() => {
+    let aReceber = 0;
+    let aPagar = 0;
+    atrasados.forEach((i) => {
+      if (i.tipo_lancamento === "receita") aReceber += i.valor;
+      else aPagar += i.valor;
+    });
+    return { aReceber, aPagar };
+  }, [atrasados]);
+
+  /* Fluxo de caixa: seis meses atrás até cinco à frente do mês visível. */
+  const fluxo = useMemo(() => {
+    const janela = [];
+    for (let offset = -6; offset <= 5; offset += 1) {
+      const d = new Date(ref.ano, ref.mes + offset, 1);
+      janela.push({
+        key: chaveMes(d.getFullYear(), d.getMonth()),
+        label: MESES_ABREV[d.getMonth()],
+        entradas: 0,
+        saidas: 0,
+      });
+    }
+
+    const porChave = new Map(janela.map((j) => [j.key, j]));
+    allItems.forEach((i) => {
+      if (i.status === "cancelado") return;
+      const alvo = porChave.get((i.data_vencimento || "").slice(0, 7));
+      if (!alvo) return;
+      if (i.tipo_lancamento === "receita") alvo.entradas += i.valor;
+      else alvo.saidas += i.valor;
+    });
+
+    return janela.map((j) => ({
+      ...j,
+      entradas: Math.round(j.entradas),
+      saidas: Math.round(j.saidas),
+      saldo: Math.round(j.entradas - j.saidas),
+      futuro: j.key > chaveHoje,
     }));
-  }, [allItems, selectedYear, dateBasis, currentYear]);
+  }, [allItems, ref, chaveHoje]);
 
-  /* Ações */
+  /* Para onde foi o dinheiro: despesas do mês agrupadas por categoria. */
+  const categorias = useMemo(() => {
+    const mapa = new Map<string, number>();
+    doMes.forEach((i) => {
+      if (i.tipo_lancamento !== "despesa") return;
+      if (situacaoDe(i, hoje) === "cancelado") return;
+      mapa.set(i.categoria, (mapa.get(i.categoria) || 0) + i.valor);
+    });
+    const total = Array.from(mapa.values()).reduce((a, b) => a + b, 0);
+    const linhas = Array.from(mapa.entries())
+      .map(([nome, valor]) => ({ nome, valor, pct: total > 0 ? (valor / total) * 100 : 0 }))
+      .sort((a, b) => b.valor - a.valor);
+    return { total, linhas };
+  }, [doMes, hoje]);
+
+  const custoFixo = useMemo(
+    () =>
+      doMes
+        .filter(
+          (i) =>
+            i.tipo_lancamento === "despesa" &&
+            i.tipo_sub === "recorrente" &&
+            i.status !== "cancelado",
+        )
+        .reduce((soma, i) => soma + i.valor, 0),
+    [doMes],
+  );
+
+  const lista = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return doMes
+      .filter((item) => {
+        if (lado !== "tudo" && item.tipo_lancamento !== lado) return false;
+        if (soAberto) {
+          const situacao = situacaoDe(item, hoje);
+          if (situacao !== "aberto" && situacao !== "atrasado") return false;
+        }
+        if (q) {
+          const alvo = `${item.descricao} ${item.categoria} ${item.cliente_ou_fornecedor ?? ""}`;
+          if (!alvo.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento));
+  }, [doMes, lado, soAberto, busca, hoje]);
+
+  /* ─── Ações ─── */
+  const irParaMes = (offset: number) => {
+    const d = new Date(ref.ano, ref.mes + offset, 1);
+    setRef({ ano: d.getFullYear(), mes: d.getMonth() });
+  };
+
   const marcarLiquidado = async (item: FinanceiroItem) => {
-    const today = todayISO();
+    const data = todayISO();
     try {
       if (item.tipo_lancamento === "receita") {
         const { error } = await supabase
           .from("receitas")
-          .update({ status: "recebido", data_recebimento: today })
+          .update({ status: "recebido", data_recebimento: data })
           .eq("receita_id", item.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("despesas")
-          .update({ status: "pago", data_pagamento: today })
+          .update({ status: "pago", data_pagamento: data })
           .eq("despesa_id", item.id);
         if (error) throw error;
       }
       toast.success(
-        `"${item.descricao}" marcado como ${item.tipo_lancamento === "receita" ? "recebido" : "pago"}!`,
+        `"${item.descricao}" marcado como ${
+          item.tipo_lancamento === "receita" ? "recebido" : "pago"
+        }.`,
       );
       queryClient.invalidateQueries({ queryKey: ["receitas"] });
       queryClient.invalidateQueries({ queryKey: ["despesas"] });
-    } catch (e: any) {
-      toast.error("Erro: " + (e?.message || String(e)));
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -1136,17 +1357,27 @@ function Financeiro() {
         const { error } = await supabase.from("despesas").delete().eq("despesa_id", item.id);
         if (error) throw error;
       }
-      toast.success("Lançamento excluído!");
+      toast.success("Lançamento excluído.");
       queryClient.invalidateQueries({ queryKey: ["receitas"] });
       queryClient.invalidateQueries({ queryKey: ["despesas"] });
-    } catch (e: any) {
-      toast.error("Erro: " + (e?.message || String(e)));
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
+  const abrirNovo = () => {
+    setEditingItem(null);
+    setModalOpen(true);
+  };
+
+  const abrirEdicao = (item: FinanceiroItem) => {
+    setEditingItem(item);
+    setModalOpen(true);
+  };
+
   const exportCSV = () => {
-    if (filtered.length === 0) {
-      toast.error("Nenhum dado para exportar com os filtros atuais.");
+    if (lista.length === 0) {
+      toast.error("Nenhum lançamento para exportar neste mês.");
       return;
     }
     const headers = [
@@ -1154,63 +1385,46 @@ function Financeiro() {
       "Descrição",
       "Categoria",
       "Valor",
-      "Status",
+      "Situação",
       "Vencimento",
-      "Competência",
       "Liquidação",
       "Cliente/Fornecedor",
-      "Sub-tipo",
+      "Ocorrência",
       "Observações",
     ];
-    const rows = filtered.map((i) => [
+    const linhas = lista.map((i) => [
       i.tipo_lancamento,
       `"${(i.descricao || "").replace(/"/g, '""')}"`,
       `"${(i.categoria || "").replace(/"/g, '""')}"`,
       Number(i.valor || 0).toFixed(2),
-      i.status,
+      rotuloSituacao(i, situacaoDe(i, hoje)),
       i.data_vencimento,
-      i.data_competencia,
       i.data_liquidacao ?? "",
       `"${(i.cliente_ou_fornecedor ?? "").replace(/"/g, '""')}"`,
-      i.tipo_sub,
+      ocorrenciaLabel(i),
       `"${(i.observacoes ?? "").replace(/"/g, '""')}"`,
     ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csv = [headers.join(","), ...linhas.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const nomePeriodo =
-      selectedMonth === "todos"
-        ? `Ano_${selectedYear}`
-        : `${MESES[selectedMonth as number].nome}_${selectedYear}`;
-    a.download = `financeiro_omni_${nomePeriodo}_${todayISO()}.csv`;
+    a.download = `financeiro_${chaveRef}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast.success("CSV exportado com sucesso!");
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado.");
   };
 
-  const periodoTextoAtivo = useMemo(() => {
-    if (selectedMonth === "todos" && selectedYear === "todos") return "todo o histórico";
-    if (selectedMonth === "todos") return `o ano de ${selectedYear}`;
-    if (selectedYear === "todos") return `${MESES[selectedMonth as number].nome} (todos os anos)`;
-    return `${MESES[selectedMonth as number].nome} de ${selectedYear}`;
-  }, [selectedMonth, selectedYear]);
-
-  const baseTexto =
-    dateBasis === "vencimento"
-      ? "vencimento"
-      : dateBasis === "competencia"
-        ? "competência"
-        : "liquidação";
+  const nomeMes = `${MESES_NOME[ref.mes]} de ${ref.ano}`;
 
   return (
     <AppShell
       title="Financeiro"
-      subtitle={`Receitas, despesas e fluxo de caixa de ${periodoTextoAtivo}`}
+      subtitle="Fluxo de caixa, contas a pagar e a receber"
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={exportCSV}
@@ -1220,10 +1434,7 @@ function Financeiro() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setEditingItem(null);
-              setModalOpen(true);
-            }}
+            onClick={abrirNovo}
             className="omni-btn omni-btn--primary omni-btn--sm"
           >
             <Plus /> Novo lançamento
@@ -1231,531 +1442,575 @@ function Financeiro() {
         </div>
       }
     >
-      <div className="omni-stack-6 w-full">
-        {/* ══════ 1. Período ══════ */}
-
-        <section className="omni-card">
-          <div className="omni-card__header flex-wrap gap-3 py-3">
-            <span className="flex items-center gap-2 text-sm font-medium text-ink-2">
-              <Calendar className="size-4 text-ink-3" /> Período
-              <span className="omni-badge omni-badge--brand">{periodoTextoAtivo}</span>
-            </span>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="omni-btn-group" role="group" aria-label="Navegar meses">
-                <button
-                  type="button"
-                  onClick={handlePrevMonth}
-                  title="Mês anterior"
-                  className="omni-btn omni-btn--secondary omni-btn--sm"
-                >
-                  <ChevronLeft />
-                  <span className="omni-sr">Mês anterior</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedMonth(currentMonth);
-                    setSelectedYear(currentYear);
-                  }}
-                  className="omni-btn omni-btn--secondary omni-btn--sm"
-                >
-                  Hoje
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  title="Próximo mês"
-                  className="omni-btn omni-btn--secondary omni-btn--sm"
-                >
-                  <ChevronRight />
-                  <span className="omni-sr">Próximo mês</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="omni-label text-xs" htmlFor="filtro-ano">
-                  Ano
-                </label>
-                <select
-                  id="filtro-ano"
-                  value={selectedYear}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setSelectedYear(v === "todos" ? "todos" : Number(v));
-                  }}
-                  className="omni-select w-auto"
-                >
-                  {ANOS_DISPONIVEIS.map((ano) => (
-                    <option key={ano} value={ano}>
-                      {ano}
-                    </option>
-                  ))}
-                  <option value="todos">Todos os anos</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="omni-label text-xs" htmlFor="filtro-base">
-                  Base
-                </label>
-                <select
-                  id="filtro-base"
-                  value={dateBasis}
-                  onChange={(e) => setDateBasis(e.target.value as any)}
-                  className="omni-select w-auto"
-                >
-                  <option value="vencimento">Vencimento</option>
-                  <option value="competencia">Competência</option>
-                  <option value="liquidacao">Liquidação</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="omni-scroll-x flex items-center gap-1.5 p-3 scrollbar-slim">
+      <div className="omni-stack-6 w-full *:min-w-0">
+        {/* ═════ Mês visível — o único controle de período da página ═════ */}
+        <section className="omni-card flex flex-wrap items-center justify-between gap-3 p-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              aria-pressed={selectedMonth === "todos"}
-              onClick={() => setSelectedMonth("todos")}
-              className={cn(
-                "omni-btn omni-btn--secondary omni-btn--sm shrink-0",
-                selectedMonth === "todos" && "border-primary bg-primary-soft text-primary-soft-fg",
-              )}
+              onClick={() => irParaMes(-1)}
+              className="omni-btn omni-btn--secondary omni-btn--icon omni-btn--sm"
+              title="Mês anterior"
             >
-              Ano todo
+              <ChevronLeft />
+              <span className="omni-sr">Mês anterior</span>
             </button>
 
-            {MESES.map((m) => {
-              const isSelected = selectedMonth === m.idx;
-              const isThisCurrentMonth = m.idx === currentMonth && selectedYear === currentYear;
-              const count = monthCounters[m.idx] || 0;
+            <div className="min-w-[168px] text-center">
+              <p className="text-md font-bold leading-tight tracking-snug text-ink">{nomeMes}</p>
+              <p className="omni-small">
+                {doMes.length} {doMes.length === 1 ? "lançamento" : "lançamentos"}
+              </p>
+            </div>
 
-              return (
-                <button
-                  key={m.idx}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => setSelectedMonth(m.idx)}
-                  className={cn(
-                    "omni-btn omni-btn--secondary omni-btn--sm shrink-0",
-                    isSelected && "border-primary bg-primary-soft text-primary-soft-fg",
-                  )}
-                >
-                  {m.abrev}
-                  {isThisCurrentMonth && !isSelected && (
-                    <span className="omni-badge omni-badge--info">hoje</span>
-                  )}
-                  {count > 0 && <span className="num opacity-70">{count}</span>}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => irParaMes(1)}
+              className="omni-btn omni-btn--secondary omni-btn--icon omni-btn--sm"
+              title="Próximo mês"
+            >
+              <ChevronRight />
+              <span className="omni-sr">Próximo mês</span>
+            </button>
           </div>
+
+          {!noMesAtual && (
+            <button
+              type="button"
+              onClick={() => setRef({ ano: agora.getFullYear(), mes: agora.getMonth() })}
+              className="omni-btn omni-btn--quiet omni-btn--sm"
+            >
+              Voltar para {MESES_NOME[agora.getMonth()].toLowerCase()}
+            </button>
+          )}
         </section>
 
-        {/* ══════ 2. Indicadores do período ══════ */}
-
-        <section className="omni-grid omni-grid-4" aria-label="Indicadores do período">
-          <div className="omni-card">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <TrendingUp className="size-3.5" /> Receitas recebidas
-              </span>
-              <p className="omni-stat__value">{fmtCurrency(kpis.rRecebido)}</p>
-              <p className="omni-stat__foot">
-                <span className="num">{fmtCurrency(kpis.rPendente)}</span> ainda a receber
-              </p>
-            </div>
-          </div>
-
-          <div className="omni-card">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <TrendingDown className="size-3.5" /> Despesas pagas
-              </span>
-              <p className="omni-stat__value">{fmtCurrency(kpis.dPago)}</p>
-              <p className="omni-stat__foot">
-                <span className="num">{fmtCurrency(kpis.dPendente)}</span> ainda a pagar
-              </p>
-            </div>
-          </div>
-
-          <div className="omni-card">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <Building2 className="size-3.5" /> Resultado
-              </span>
-              <p className={cn("omni-stat__value", kpis.saldo < 0 && "text-danger")}>
-                {fmtCurrency(kpis.saldo)}
-              </p>
-              <p className="omni-stat__foot">
-                <span
-                  className={cn(
-                    "omni-badge",
-                    kpis.saldo >= 0 ? "omni-badge--success" : "omni-badge--danger",
-                  )}
-                >
-                  {kpis.saldo >= 0 ? "No azul" : "No vermelho"}
+        {/* ═════ Resumo do mês ═════ */}
+        <section className="omni-grid omni-grid-4" aria-label={`Resumo de ${nomeMes}`}>
+          <Kpi
+            label="Entrou"
+            valor={fmtCurrency(resumo.entrouRealizado)}
+            icone={<ArrowDownLeft className="size-3.5" />}
+            rodape={
+              resumo.aReceber > 0 ? (
+                <>
+                  <span className="num">{fmtCurrency(resumo.aReceber)}</span> ainda a receber
+                </>
+              ) : (
+                "tudo recebido no mês"
+              )
+            }
+          />
+          <Kpi
+            label="Saiu"
+            valor={fmtCurrency(resumo.saiuRealizado)}
+            icone={<ArrowUpRight className="size-3.5" />}
+            rodape={
+              resumo.aPagar > 0 ? (
+                <>
+                  <span className="num">{fmtCurrency(resumo.aPagar)}</span> ainda a pagar
+                </>
+              ) : (
+                "tudo pago no mês"
+              )
+            }
+          />
+          <Kpi
+            label="Sobrou"
+            valor={fmtCurrency(resumo.saldoRealizado)}
+            tom={resumo.saldoRealizado < 0 ? "negativo" : undefined}
+            icone={<Wallet className="size-3.5" />}
+            rodape={
+              <>
+                com o mês fechado:{" "}
+                <span className={cn("num", resumo.saldoPrevisto < 0 && "text-danger")}>
+                  {fmtCurrency(resumo.saldoPrevisto)}
                 </span>
-                <span className="num">{String(kpis.margem).replace(".", ",")}% de margem</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="omni-card">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <Clock className="size-3.5" /> Pendências
-              </span>
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="omni-small">A receber</p>
-                  <p className="num text-lg font-bold text-ink">{fmtCurrency(kpis.rPendente)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="omni-small">A pagar</p>
-                  <p className="num text-lg font-bold text-ink">{fmtCurrency(kpis.dPendente)}</p>
-                </div>
-              </div>
-              <p className="omni-stat__foot">
-                <DollarSign className="size-3.5" /> Em aberto no período
-              </p>
-            </div>
-          </div>
+              </>
+            }
+          />
+          <Kpi
+            label="Contas atrasadas"
+            valor={String(atrasados.length)}
+            tom={atrasados.length > 0 ? "negativo" : undefined}
+            icone={<AlertCircle className="size-3.5" />}
+            rodape={
+              atrasados.length === 0 ? (
+                "nada vencido em aberto"
+              ) : (
+                <>
+                  {totalAtrasado.aReceber > 0 && (
+                    <>
+                      <span className="num">{fmtCurrency(totalAtrasado.aReceber)}</span> a receber
+                    </>
+                  )}
+                  {totalAtrasado.aReceber > 0 && totalAtrasado.aPagar > 0 && " · "}
+                  {totalAtrasado.aPagar > 0 && (
+                    <>
+                      <span className="num">{fmtCurrency(totalAtrasado.aPagar)}</span> a pagar
+                    </>
+                  )}
+                </>
+              )
+            }
+          />
         </section>
 
-        {/* ══════ 3. Busca e filtros ══════ */}
-
-        <div className="omni-card">
-          <div className="omni-card__body flex flex-wrap items-end gap-4 py-4">
-            <div className="omni-field min-w-[240px] flex-1">
-              <label className="omni-label" htmlFor="busca-lancamento">
-                Buscar lançamento
-              </label>
-              <div className="omni-input-group">
-                <Search />
-                <input
-                  id="busca-lancamento"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Descrição, categoria, cliente ou fornecedor"
-                  className="omni-input"
-                />
-              </div>
-            </div>
-
-            <div className="omni-field w-full sm:w-52">
-              <label className="omni-label" htmlFor="filtro-tipo">
-                Tipo
-              </label>
-              <select
-                id="filtro-tipo"
-                value={filterTipo}
-                onChange={(e) => setFilterTipo(e.target.value as any)}
-                className="omni-select"
-              >
-                <option value="todos">Receitas e despesas</option>
-                <option value="receita">Apenas receitas</option>
-                <option value="despesa">Apenas despesas</option>
-              </select>
-            </div>
-
-            <div className="omni-field w-full sm:w-52">
-              <label className="omni-label" htmlFor="filtro-situacao">
-                Situação
-              </label>
-              <select
-                id="filtro-situacao"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="omni-select"
-              >
-                <option value="todos">Todas as situações</option>
-                <option value="recebido">Recebidos</option>
-                <option value="pago">Pagos</option>
-                <option value="pendente">Pendentes</option>
-                <option value="atrasado">Atrasados</option>
-                <option value="cancelado">Cancelados</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* ══════ 4. Fluxo de caixa mensal ══════ */}
-
+        {/* ═════ Fluxo de caixa ═════ */}
         <section className="omni-card">
           <div className="omni-card__header">
             <div>
-              <h2 className="omni-h4">
-                Fluxo de caixa mensal em {selectedYear === "todos" ? currentYear : selectedYear}
-              </h2>
+              <h2 className="omni-h4">Fluxo de caixa mês a mês</h2>
               <p className="omni-small mt-0.5">
-                Receitas recebidas e despesas pagas, por {baseTexto}
+                Por data de vencimento. Barras claras são meses futuros — ainda é previsão.
               </p>
             </div>
           </div>
           <div className="omni-card__body">
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ left: 4, right: 8, top: 4 }} barGap={2}>
-                  <CartesianGrid
-                    stroke="var(--omni-chart-grid)"
-                    strokeDasharray="3 3"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="m"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: "var(--omni-text-3)", fontSize: 11 }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    width={64}
-                    tick={{ fill: "var(--omni-text-3)", fontSize: 10 }}
-                    tickFormatter={(v) => `R$ ${(Number(v) / 1000).toFixed(0)} mil`}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--omni-surface-2)" }}
-                    contentStyle={TOOLTIP_STYLE}
-                    labelStyle={{ color: "var(--omni-text)", fontWeight: 700 }}
-                    formatter={(val: any, name: any) => [fmtCurrency(Number(val)), name]}
-                  />
-                  <Legend
-                    iconType="circle"
-                    iconSize={8}
-                    wrapperStyle={{
-                      fontSize: "var(--omni-text-xs)",
-                      color: "var(--omni-text-2)",
-                      paddingTop: 8,
-                    }}
-                  />
-                  <Bar dataKey="Receitas" fill="var(--omni-chart-1)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Despesas" fill="var(--omni-chart-2)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="omni-scroll-x scrollbar-slim">
+              <div className="h-64 min-w-[620px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={fluxo} margin={{ left: 4, right: 8, top: 8 }} barGap={2}>
+                    <CartesianGrid
+                      stroke="var(--omni-chart-grid)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "var(--omni-text-3)", fontSize: 11 }}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      width={72}
+                      tick={{ fill: "var(--omni-text-3)", fontSize: 10 }}
+                      tickFormatter={(v) => fmtCompact(Number(v))}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "var(--omni-surface-2)" }}
+                      contentStyle={TOOLTIP_STYLE}
+                      labelStyle={{ color: "var(--omni-text)", fontWeight: 700 }}
+                      formatter={(val: number | string, name: string) => [
+                        fmtCurrency(Number(val)),
+                        name,
+                      ]}
+                    />
+                    <Bar dataKey="entradas" name="Entradas" radius={[4, 4, 0, 0]}>
+                      {fluxo.map((d) => (
+                        <Cell
+                          key={d.key}
+                          fill="var(--omni-chart-1)"
+                          fillOpacity={d.futuro ? 0.4 : 1}
+                        />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="saidas" name="Saídas" radius={[4, 4, 0, 0]}>
+                      {fluxo.map((d) => (
+                        <Cell
+                          key={d.key}
+                          fill="var(--omni-chart-2)"
+                          fillOpacity={d.futuro ? 0.4 : 1}
+                        />
+                      ))}
+                    </Bar>
+                    <Line
+                      type="monotone"
+                      dataKey="saldo"
+                      name="Saldo"
+                      stroke="var(--omni-text-2)"
+                      strokeWidth={2}
+                      dot={{ r: 2.5, fill: "var(--omni-text-2)" }}
+                      activeDot={{ r: 4 }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span className="omni-small flex items-center gap-1.5">
+                <span
+                  className="size-2.5 rounded-full"
+                  style={{ background: "var(--omni-chart-1)" }}
+                  aria-hidden="true"
+                />
+                Entradas
+              </span>
+              <span className="omni-small flex items-center gap-1.5">
+                <span
+                  className="size-2.5 rounded-full"
+                  style={{ background: "var(--omni-chart-2)" }}
+                  aria-hidden="true"
+                />
+                Saídas
+              </span>
+              <span className="omni-small flex items-center gap-1.5">
+                <span
+                  className="h-0.5 w-4 rounded-full"
+                  style={{ background: "var(--omni-text-2)" }}
+                  aria-hidden="true"
+                />
+                Saldo do mês
+              </span>
             </div>
           </div>
         </section>
 
-        {/* ══════ 5. Lançamentos ══════ */}
-
-        <section className="omni-table-wrap">
-          <div className="omni-card__header">
-            <div>
-              <h2 className="omni-h4">Lançamentos de {periodoTextoAtivo}</h2>
-              <p className="omni-small mt-0.5">Filtrados por data de {baseTexto}</p>
+        {/* ═════ Atenção + destino do dinheiro ═════ */}
+        <div className="grid gap-4 lg:grid-cols-2 *:min-w-0">
+          <section className="omni-card">
+            <div className="omni-card__header">
+              <div>
+                <h2 className="omni-h4">Precisa de atenção</h2>
+                <p className="omni-small mt-0.5">Vencidas em aberto e o que vence em 7 dias</p>
+              </div>
+              {atrasados.length > 0 && (
+                <span className="omni-badge omni-badge--danger">{atrasados.length} em atraso</span>
+              )}
             </div>
-            <span className="omni-badge omni-badge--outline">{filtered.length}</span>
-          </div>
 
-          {otherYearsWithData.length > 0 && (
-            <div className="p-5 pb-0">
-              <div className="omni-alert omni-alert--info">
-                <Info className="omni-alert__icon" />
-                <div className="omni-alert__body">
-                  <p className="omni-alert__title">
-                    Há lançamentos de {MESES[selectedMonth as number].nome} em outro ano
-                  </p>
-                  <p className="omni-alert__text">
-                    Encontramos registros em {otherYearsWithData.join(", ")}. Troque o ano para
-                    vê-los.
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {otherYearsWithData.map((ano) => (
-                      <button
-                        key={ano}
-                        type="button"
-                        onClick={() => setSelectedYear(ano)}
-                        className="omni-btn omni-btn--secondary omni-btn--sm"
-                      >
-                        Ver {MESES[selectedMonth as number].abrev}/{ano}
-                      </button>
-                    ))}
+            {atrasados.length === 0 && proximos.length === 0 ? (
+              <div className="omni-empty">
+                <span className="omni-empty__art">
+                  <CheckCircle2 />
+                </span>
+                <h4>Nada pendente por aqui</h4>
+                <p>Nenhuma conta vencida em aberto e nada vencendo nos próximos sete dias.</p>
+              </div>
+            ) : (
+              <div className="max-h-[420px] overflow-y-auto scrollbar-slim">
+                {atrasados.length > 0 && (
+                  <>
+                    <p className="omni-eyebrow bg-surface-2 px-4 py-2 text-danger-fg">
+                      Vencidas · {atrasados.length}
+                    </p>
+                    <ul>
+                      {atrasados.slice(0, 8).map((item) => (
+                        <LinhaPendencia
+                          key={item.id}
+                          item={item}
+                          hoje={hoje}
+                          onLiquidar={marcarLiquidado}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {proximos.length > 0 && (
+                  <>
+                    <p className="omni-eyebrow bg-surface-2 px-4 py-2">
+                      Próximos 7 dias · {proximos.length}
+                    </p>
+                    <ul>
+                      {proximos.slice(0, 8).map((item) => (
+                        <LinhaPendencia
+                          key={item.id}
+                          item={item}
+                          hoje={hoje}
+                          onLiquidar={marcarLiquidado}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="omni-card">
+            <div className="omni-card__header">
+              <div>
+                <h2 className="omni-h4">Para onde foi o dinheiro</h2>
+                <p className="omni-small mt-0.5">Despesas de {nomeMes} por categoria</p>
+              </div>
+              <span className="omni-badge omni-badge--outline num">
+                {fmtCurrency(categorias.total)}
+              </span>
+            </div>
+
+            <div className="omni-card__body">
+              {categorias.linhas.length === 0 ? (
+                <p className="omni-small">Nenhuma despesa lançada neste mês.</p>
+              ) : (
+                <ul className="omni-stack-2">
+                  {categorias.linhas.map((linha) => (
+                    <li key={linha.nome}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="truncate text-sm font-medium text-ink">{linha.nome}</span>
+                        <span className="num shrink-0 text-sm text-ink-2">
+                          {fmtCurrency(linha.valor)}
+                          <span className="omni-muted"> · {Math.round(linha.pct)}%</span>
+                        </span>
+                      </div>
+                      <div className="omni-progress mt-1.5">
+                        <div
+                          className="omni-progress__bar"
+                          style={{ width: `${Math.max(linha.pct, 2)}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {custoFixo > 0 && (
+                <div className="omni-alert omni-alert--info mt-4">
+                  <Info className="omni-alert__icon" />
+                  <div className="omni-alert__body">
+                    <p className="omni-alert__title">
+                      Custo fixo do mês: <span className="num">{fmtCurrency(custoFixo)}</span>
+                    </p>
+                    <p className="omni-alert__text">
+                      Soma das despesas mensais recorrentes — o piso que a operação precisa cobrir
+                      todo mês.
+                    </p>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
-          )}
+          </section>
+        </div>
 
-          <div className="omni-table-scroll">
-            <table className="omni-table">
-              <thead>
-                <tr>
-                  <th className="omni-th-num">Vencimento</th>
-                  <th>Descrição</th>
-                  <th>Categoria</th>
-                  <th>Ocorrência</th>
-                  <th>Cliente / fornecedor</th>
-                  <th className="omni-th-num">Valor</th>
-                  <th>Situação</th>
-                  <th className="omni-th-num">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  [0, 1, 2, 3, 4, 5].map((i) => (
-                    <tr key={i}>
-                      <td colSpan={8} className="p-0">
-                        <div className="omni-skeleton h-row w-full rounded-none" />
-                      </td>
+        {/* ═════ Lançamentos do mês ═════ */}
+        <section className="omni-table-wrap">
+          <div className="omni-card__header flex-wrap gap-3">
+            <div>
+              <h2 className="omni-h4">Lançamentos de {nomeMes}</h2>
+              <p className="omni-small mt-0.5">
+                {lista.length} {lista.length === 1 ? "lançamento" : "lançamentos"} · ordenados por
+                vencimento
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="omni-input-group w-full sm:w-60">
+                <Search />
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar no mês"
+                  aria-label="Buscar lançamento no mês"
+                  className="omni-input"
+                />
+              </div>
+
+              <div className="omni-btn-group" role="group" aria-label="Filtrar por tipo">
+                {(
+                  [
+                    ["tudo", "Tudo"],
+                    ["receita", "Entradas"],
+                    ["despesa", "Saídas"],
+                  ] as const
+                ).map(([valor, rotulo]) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    aria-pressed={lado === valor}
+                    onClick={() => setLado(valor)}
+                    className="omni-btn omni-btn--secondary omni-btn--sm"
+                  >
+                    {rotulo}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                aria-pressed={soAberto}
+                onClick={() => setSoAberto((v) => !v)}
+                className={cn(
+                  "omni-btn omni-btn--secondary omni-btn--sm",
+                  soAberto && "border-primary bg-primary-soft text-primary-soft-fg",
+                )}
+              >
+                <CalendarClock /> Só em aberto
+              </button>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="omni-stack-2 p-4">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="omni-skeleton h-row w-full" />
+              ))}
+            </div>
+          ) : lista.length === 0 ? (
+            <div className="omni-empty">
+              <span className="omni-empty__art">
+                <Wallet />
+              </span>
+              <h4>Nenhum lançamento em {nomeMes}</h4>
+              <p>
+                Use as setas acima para trocar de mês ou cadastre uma entrada ou saída para este
+                período.
+              </p>
+              <button
+                type="button"
+                onClick={abrirNovo}
+                className="omni-btn omni-btn--secondary omni-btn--sm"
+              >
+                <Plus /> Novo lançamento
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Tabela no desktop */}
+              <div className="omni-table-scroll hidden md:block">
+                <table className="omni-table">
+                  <thead>
+                    <tr>
+                      <th className="omni-th-num">Vencimento</th>
+                      <th>Descrição</th>
+                      <th>Categoria</th>
+                      <th>Cliente / fornecedor</th>
+                      <th>Ocorrência</th>
+                      <th className="omni-th-num">Valor</th>
+                      <th>Situação</th>
+                      <th className="omni-th-num">Ações</th>
                     </tr>
-                  ))
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-0">
-                      <div className="omni-empty">
-                        <span className="omni-empty__art">
-                          <DollarSign />
-                        </span>
-                        <h4>Nenhum lançamento em {periodoTextoAtivo}</h4>
-                        <p>
-                          Escolha outro mês na barra acima ou cadastre uma entrada ou saída para
-                          este período.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingItem(null);
-                            setModalOpen(true);
-                          }}
-                          className="omni-btn omni-btn--secondary omni-btn--sm"
-                        >
-                          <Plus /> Novo lançamento
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((item) => {
-                    const isReceita = item.tipo_lancamento === "receita";
-                    const st = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pendente;
-                    const isLiquidado = item.status === "recebido" || item.status === "pago";
-                    return (
-                      <tr key={item.id} className="group">
-                        <td className="omni-td-num">
-                          {fmtDate(item.data_vencimento)}
-                          {item.data_liquidacao && (
-                            <p className="omni-small">liquidado {fmtDate(item.data_liquidacao)}</p>
-                          )}
-                        </td>
+                  </thead>
+                  <tbody>
+                    {lista.map((item) => {
+                      const isReceita = item.tipo_lancamento === "receita";
+                      const situacao = situacaoDe(item, hoje);
+                      return (
+                        <tr key={item.id}>
+                          <td className="omni-td-num">
+                            {fmtDate(item.data_vencimento)}
+                            {item.data_liquidacao && (
+                              <p className="omni-small">baixa {fmtDiaMes(item.data_liquidacao)}</p>
+                            )}
+                          </td>
 
-                        <td>
-                          <div className="flex items-center gap-2.5">
+                          <td>
+                            <div className="flex items-center gap-2.5">
+                              <span
+                                className={cn(
+                                  "grid size-7 shrink-0 place-items-center rounded-sm",
+                                  isReceita
+                                    ? "bg-success-soft text-success"
+                                    : "bg-danger-soft text-danger",
+                                )}
+                                aria-hidden="true"
+                              >
+                                {isReceita ? (
+                                  <ArrowDownLeft className="size-3.5" />
+                                ) : (
+                                  <ArrowUpRight className="size-3.5" />
+                                )}
+                              </span>
+                              <span className="omni-td-strong max-w-[260px] truncate">
+                                {item.descricao}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="text-ink-2">{item.categoria}</td>
+                          <td className="text-ink-2">{item.cliente_ou_fornecedor || "—"}</td>
+
+                          <td>
                             <span
                               className={cn(
-                                "grid size-7 shrink-0 place-items-center rounded-sm",
-                                isReceita
-                                  ? "bg-success-soft text-success"
-                                  : "bg-danger-soft text-danger",
+                                "omni-badge",
+                                item.tipo_sub === "recorrente"
+                                  ? "omni-badge--info"
+                                  : item.tipo_sub === "parcelada"
+                                    ? "omni-badge--brand"
+                                    : "omni-badge--outline",
                               )}
-                              aria-hidden="true"
                             >
-                              {isReceita ? (
-                                <ArrowDownLeft className="size-3.5" />
-                              ) : (
-                                <ArrowUpRight className="size-3.5" />
+                              {item.tipo_sub === "recorrente" && <RefreshCw />}
+                              {item.tipo_sub === "parcelada" && <Layers />}
+                              {ocorrenciaLabel(item)}
+                            </span>
+                          </td>
+
+                          <td className="omni-td-num">
+                            <span
+                              className={cn(
+                                "font-semibold",
+                                isReceita ? "text-success" : "text-danger",
                               )}
+                            >
+                              {isReceita ? "+" : "−"}
+                              {fmtCurrency(item.valor)}
                             </span>
-                            <span className="omni-td-strong max-w-[240px] truncate">
-                              {item.descricao}
+                          </td>
+
+                          <td>
+                            <span className={cn("omni-badge", BADGE_SITUACAO[situacao])}>
+                              <IconeSituacao situacao={situacao} /> {rotuloSituacao(item, situacao)}
                             </span>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="text-ink-2">{item.categoria}</td>
-
-                        <td>
-                          <span
-                            className={cn(
-                              "omni-badge",
-                              item.tipo_sub === "recorrente"
-                                ? "omni-badge--info"
-                                : item.tipo_sub === "parcelada"
-                                  ? "omni-badge--brand"
-                                  : "omni-badge--outline",
-                            )}
-                          >
-                            {item.tipo_sub === "recorrente" && <RefreshCw />}
-                            {item.tipo_sub === "parcelada" && <Layers />}
-                            {tipoLabel(item)}
-                          </span>
-                        </td>
-
-                        <td className="text-ink-2">{item.cliente_ou_fornecedor || "—"}</td>
-
-                        <td className="omni-td-num">
-                          <span
-                            className={cn(
-                              "font-semibold",
-                              isReceita ? "text-success" : "text-danger",
-                            )}
-                          >
-                            {isReceita ? "+" : "−"}
-                            {fmtCurrency(item.valor)}
-                          </span>
-                        </td>
-
-                        <td>
-                          <span className={cn("omni-badge", st.badge)}>
-                            {st.icon} {st.label}
-                          </span>
-                        </td>
-
-                        <td className="omni-td-actions">
-                          <div className="inline-flex items-center gap-1">
-                            {!isLiquidado && item.status !== "cancelado" && (
+                          <td className="omni-td-actions">
+                            <div className="inline-flex items-center gap-1">
+                              {situacao !== "liquidado" && situacao !== "cancelado" && (
+                                <button
+                                  type="button"
+                                  onClick={() => marcarLiquidado(item)}
+                                  title={isReceita ? "Marcar como recebido" : "Marcar como pago"}
+                                  className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-success hover:bg-success-soft"
+                                >
+                                  <CheckCircle2 />
+                                  <span className="omni-sr">
+                                    {isReceita ? "Marcar como recebido" : "Marcar como pago"}
+                                  </span>
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => marcarLiquidado(item)}
-                                title={isReceita ? "Marcar como recebido" : "Marcar como pago"}
-                                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-success hover:bg-success-soft"
+                                onClick={() => abrirEdicao(item)}
+                                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                                title={`Editar ${item.descricao}`}
                               >
-                                <CheckCircle2 />
-                                <span className="omni-sr">
-                                  {isReceita ? "Marcar como recebido" : "Marcar como pago"}
-                                </span>
+                                <Pencil />
+                                <span className="omni-sr">Editar {item.descricao}</span>
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingItem(item);
-                                setModalOpen(true);
-                              }}
-                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
-                              title={`Editar ${item.descricao}`}
-                            >
-                              <Pencil />
-                              <span className="omni-sr">Editar {item.descricao}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => excluir(item)}
-                              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
-                              title={`Excluir ${item.descricao}`}
-                            >
-                              <Trash2 />
-                              <span className="omni-sr">Excluir {item.descricao}</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                              <button
+                                type="button"
+                                onClick={() => excluir(item)}
+                                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm text-danger hover:bg-danger-soft"
+                                title={`Excluir ${item.descricao}`}
+                              >
+                                <Trash2 />
+                                <span className="omni-sr">Excluir {item.descricao}</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-          <div className="omni-table__foot">
-            <span>
-              {filtered.length} {filtered.length === 1 ? "lançamento" : "lançamentos"} em{" "}
-              {periodoTextoAtivo}
-            </span>
-            <span className="num">Resultado {fmtCurrency(kpis.saldo)}</span>
-          </div>
+              {/* Cartões no mobile */}
+              <ul className="omni-stack-2 p-3 md:hidden">
+                {lista.map((item) => (
+                  <CardLancamento
+                    key={item.id}
+                    item={item}
+                    hoje={hoje}
+                    onLiquidar={marcarLiquidado}
+                    onEditar={abrirEdicao}
+                    onExcluir={excluir}
+                  />
+                ))}
+              </ul>
+
+              <div className="omni-table__foot">
+                <span>
+                  {lista.length} {lista.length === 1 ? "lançamento" : "lançamentos"} em {nomeMes}
+                </span>
+                <span className="num">Resultado do mês {fmtCurrency(resumo.saldoRealizado)}</span>
+              </div>
+            </>
+          )}
         </section>
       </div>
 

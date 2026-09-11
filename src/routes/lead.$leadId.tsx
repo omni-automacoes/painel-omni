@@ -559,7 +559,7 @@ function LeadDetailPage() {
       title={displayName}
       subtitle={`Negócio criado em ${formatDateTime(lead.criado_em)}`}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => navigate({ to: "/negocios" })}

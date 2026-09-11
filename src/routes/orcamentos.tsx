@@ -82,6 +82,7 @@ type OrcamentoRecord = {
   perguntas_comerciais?: string[];
   respostas_perguntas_comerciais?: (string | null)[] | null;
   responsavel?: string;
+  usuarios?: { user_nome?: string | null } | null;
   lead_id?: string | null;
   leads?: LeadMinimal | null;
   margem_lucro?: number | null;
@@ -240,7 +241,7 @@ function OrcamentosPage() {
       const { data, error } = await supabase
         .from("orcamentos")
         .select(
-          "*, leads (lead_id, lead_nome, lead_telefone, lead_email, lead_etapa_funil, lead_valor)",
+          "*, leads (lead_id, lead_nome, lead_telefone, lead_email, lead_etapa_funil, lead_valor), usuarios:responsavel (user_nome)",
         )
         .order("criado_em", { ascending: false });
 
@@ -637,7 +638,7 @@ function OrcamentosPage() {
       title="Orçamentos"
       subtitle="Dimensionamento técnico, esforço em horas e preço em três cenários"
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {unassignedCount > 0 && (
             <button
               type="button"
@@ -1133,7 +1134,9 @@ function OrcamentosPage() {
                     type="button"
                     onClick={() => {
                       setActiveOrcamento(orc);
-                      window.scrollTo({ top: 380, behavior: "smooth" });
+                      document
+                        .getElementById("omni-main")
+                        ?.scrollTo({ top: 380, behavior: "smooth" });
                     }}
                     className={cn(
                       "omni-card group flex cursor-pointer flex-col gap-3 p-4 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni",
@@ -1160,6 +1163,12 @@ function OrcamentosPage() {
                     <p className="line-clamp-2 text-sm font-medium leading-snug text-ink">
                       {orc.solicitacao_original}
                     </p>
+
+                    {orc.usuarios?.user_nome && (
+                      <span className="omni-small flex items-center gap-1.5">
+                        <UserCheck className="size-3 shrink-0" /> por {orc.usuarios.user_nome}
+                      </span>
+                    )}
 
                     {ideal && (
                       <div className="mt-auto flex items-end justify-between border-t border-line-subtle pt-3">

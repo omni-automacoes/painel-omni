@@ -492,7 +492,7 @@ function Atendimentos() {
       subtitle={`${chats.length} ${chats.length === 1 ? "conversa" : "conversas"}${totalUnread > 0 ? ` · ${totalUnread} não lidas` : ""}`}
       flush
     >
-      <div className="flex h-[calc(100vh-var(--omni-topbar-h))] overflow-hidden bg-bg font-sans text-ink">
+      <div className="flex h-full overflow-hidden bg-bg font-sans text-ink">
         {/* ══════ Lista de conversas ══════ */}
         <section
           className="flex w-[340px] shrink-0 flex-col border-r border-line bg-surface sm:w-[380px]"

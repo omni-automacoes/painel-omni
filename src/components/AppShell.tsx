@@ -1,38 +1,19 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  Handshake,
-  MessagesSquare,
-  CheckSquare,
-  Users,
-  Wallet,
-  BarChart3,
-  Settings,
-  Calculator,
-  Bell,
-  LogOut,
-  Sun,
-  Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Bell, Menu } from "lucide-react";
+import { type ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
-import { useAuth } from "./AuthProvider";
-import { useTheme } from "./ThemeProvider";
+import { AppSidebar, useSidebarState } from "./AppSidebar";
 
-const NAV = [
-  { label: "Visão Geral", to: "/", icon: LayoutDashboard },
-  { label: "Negócios", to: "/negocios", icon: Handshake },
-  { label: "Clientes", to: "/clientes", icon: Users },
-  { label: "Atendimentos", to: "/atendimentos", icon: MessagesSquare },
-  { label: "Tarefas", to: "/tarefas", icon: CheckSquare },
-  { label: "Orçamentos", to: "/orcamentos", icon: Calculator },
-  { label: "Financeiro", to: "/financeiro", icon: Wallet },
-  { label: "Relatório Geral", to: "/relatorios", icon: BarChart3 },
-  { label: "Configurações", to: "/configuracoes", icon: Settings },
-] as const;
+/* Botão de utilidade do cabeçalho: abrir a gaveta no mobile e o sino. */
+const MENU_BUTTON =
+  "order-1 grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-surface-3 hover:text-ink";
 
+/*
+ * Casca da aplicação: altura fixa de viewport, menu e cabeçalho estáticos e a
+ * rolagem acontecendo dentro do <main>. É isso que permite o cabeçalho crescer
+ * (duas linhas no mobile) sem quebrar as telas de altura cheia, que agora usam
+ * `h-full` em vez de calcular 100vh menos a altura do topo.
+ */
 export function AppShell({
   title,
   subtitle,
@@ -46,169 +27,77 @@ export function AppShell({
   children: ReactNode;
   flush?: boolean;
 }) {
-  /* Padrão do guia: menu lateral de 248px. O modo recolhido continua
-     disponível como estado secundário (trilho de ícones). */
-  const [collapsed, setCollapsed] = useState(false);
-  const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { user, signOut } = useAuth();
-  const { theme, setTheme } = useTheme();
-
-  const email = user?.email || "";
-  const name =
-    user?.user_metadata?.full_name || user?.user_metadata?.name || email.split("@")[0] || "Usuário";
-  const initials = name
-    .split(" ")
-    .map((n: string) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-  const isDark = theme === "dark";
-  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
+  const sidebar = useSidebarState();
 
   return (
-    <div className="flex min-h-screen w-full bg-bg font-sans text-ink antialiased">
-      {/* ───────────────────────── Menu lateral ───────────────────────── */}
-      <aside
+    <div className="flex h-dvh w-full overflow-hidden bg-bg font-sans text-ink antialiased">
+      <AppSidebar state={sidebar} />
+
+      <div
         className={cn(
-          "sticky top-0 z-[var(--omni-z-sticky)] flex h-screen shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-[var(--omni-dur-base)] ease-omni",
-          collapsed ? "w-[68px]" : "w-sidebar",
+          "flex min-w-0 flex-1 flex-col",
+          "transition-[padding] duration-[var(--omni-dur-base)] ease-omni",
+          sidebar.expanded ? "lg:pl-[284px]" : "lg:pl-[100px]",
         )}
       >
-        <div
-          className={cn(
-            "flex h-topbar shrink-0 items-center border-b border-line",
-            collapsed ? "justify-center px-2" : "px-5",
-          )}
-        >
-          <Link
-            to="/"
-            className="flex items-center gap-3 rounded-md"
-            aria-label="Omni — ir para a visão geral"
-          >
-            <img
-              src="/LOGO%20OMNI%20(1).png"
-              alt="Omni"
-              className={cn("w-auto object-contain", collapsed ? "h-7" : "h-8")}
-            />
-          </Link>
-        </div>
-
-        <nav
-          className="omni-nav flex-1 gap-0.5 overflow-y-auto p-3 scrollbar-slim"
-          aria-label="Navegação principal"
-        >
-          {NAV.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                aria-current={active ? "page" : undefined}
-                title={collapsed ? item.label : undefined}
-                className={cn(
-                  "group relative flex h-control items-center gap-3 rounded-md px-3 text-sm font-medium text-ink-2 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-surface-3 hover:text-ink",
-                  active &&
-                    "bg-primary-soft font-semibold text-primary-soft-fg hover:bg-primary-soft hover:text-primary-soft-fg",
-                  collapsed && "justify-center px-0",
-                )}
-              >
-                <item.icon className={cn("size-4 shrink-0", !active && "opacity-75")} />
-                {collapsed ? (
-                  <span className="omni-sr">{item.label}</span>
-                ) : (
-                  <span className="truncate">{item.label}</span>
-                )}
-                {collapsed && (
-                  <span className="omni-tooltip pointer-events-none absolute left-[60px] whitespace-nowrap opacity-0 transition-opacity duration-[var(--omni-dur-fast)] group-hover:opacity-100">
-                    {item.label}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="shrink-0 border-t border-line p-3">
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            className={cn(
-              "flex h-control w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-ink-3 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-surface-3 hover:text-ink",
-              collapsed && "justify-center px-0",
-            )}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="size-4 shrink-0" />
-            ) : (
-              <PanelLeftClose className="size-4 shrink-0" />
-            )}
-            <span className={cn(collapsed && "omni-sr")}>
-              {collapsed ? "Expandir menu" : "Recolher menu"}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className={cn(
-              "flex h-control w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-ink-3 transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:bg-danger-soft hover:text-danger-fg",
-              collapsed && "justify-center px-0",
-            )}
-          >
-            <LogOut className="size-4 shrink-0" />
-            <span className={cn(collapsed && "omni-sr")}>Sair da conta</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* ─────────────────────── Área principal ─────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-[var(--omni-z-sticky)] flex h-topbar shrink-0 items-center gap-4 border-b border-line bg-surface px-5">
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-md font-bold leading-tight tracking-snug text-ink">
-              {title}
-            </h1>
-            {subtitle && <p className="truncate text-xs text-ink-3">{subtitle}</p>}
-          </div>
-
-          {actions}
-
-          <div className="flex items-center gap-2">
+        <header className="shrink-0 px-4 pb-4 pt-5 sm:px-6 lg:pb-5 lg:pt-7">
+          {/*
+            Desktop: uma linha só — título, ações e sino. Recolher o menu é
+            papel da alça na borda do próprio menu, não daqui.
+            Mobile: `order` + `w-full` reorganizam em três linhas — utilidades
+            (abrir a gaveta e sino), título e ações — para o título ter a
+            largura inteira em vez de ficar espremido entre dois botões.
+          */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
             <button
               type="button"
-              onClick={toggleTheme}
-              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
-              title={isDark ? "Usar tema claro" : "Usar tema escuro"}
+              onClick={() => sidebar.setMobileOpen(true)}
+              className={cn(MENU_BUTTON, "lg:hidden")}
+              title="Abrir menu"
             >
-              {isDark ? <Sun /> : <Moon />}
-              <span className="omni-sr">{isDark ? "Usar tema claro" : "Usar tema escuro"}</span>
+              <Menu className="size-[18px]" />
+              <span className="omni-sr">Abrir menu</span>
             </button>
 
             <button
               type="button"
-              className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+              className={cn(MENU_BUTTON, "order-2 ml-auto lg:order-4 lg:ml-0")}
               title="Notificações"
             >
-              <Bell />
+              <Bell className="size-[18px]" />
               <span className="omni-sr">Notificações</span>
             </button>
-          </div>
 
-          <div className="flex items-center gap-3 border-l border-line pl-4">
-            <div className="hidden text-right sm:block">
-              <p className="max-w-[160px] truncate text-sm font-semibold leading-tight text-ink">
-                {name}
-              </p>
-              <p className="max-w-[160px] truncate text-xs text-ink-3">{email}</p>
+            <div className="order-3 w-full min-w-0 lg:order-2 lg:w-auto lg:flex-1">
+              <h1 className="line-clamp-2 text-lg font-bold leading-snug tracking-tight text-ink lg:truncate lg:text-xl">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="mt-0.5 line-clamp-1 text-sm leading-snug text-ink-3 lg:truncate">
+                  {subtitle}
+                </p>
+              )}
             </div>
-            <span className="omni-avatar" aria-hidden="true">
-              {initials}
-            </span>
+
+            {actions && (
+              <div className="order-4 flex w-full flex-wrap items-center gap-2 lg:order-3 lg:w-auto lg:flex-nowrap">
+                {actions}
+              </div>
+            )}
           </div>
         </header>
 
-        <main className={cn("min-w-0 flex-1", flush ? "" : "p-5")}>{children}</main>
+        <main
+          id="omni-main"
+          className={cn(
+            "min-h-0 flex-1",
+            flush
+              ? "flex flex-col overflow-hidden"
+              : "overflow-y-auto px-4 pb-6 sm:px-6 scrollbar-slim",
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

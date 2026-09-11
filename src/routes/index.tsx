@@ -1,36 +1,33 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/components/AuthProvider";
+import { useQuery } from "@tanstack/react-query";
 import {
-  DollarSign,
-  TrendingUp,
-  Users,
-  Target,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
+  AlertCircle,
+  ArrowRight,
+  Calculator,
+  CalendarClock,
+  CheckSquare,
+  Handshake,
   Plus,
-  Building2,
-  CalendarDays,
-  ExternalLink,
-  Square,
-  Kanban,
+  Repeat,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
+import { useMemo } from "react";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
-  Legend,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+
 import { AppShell } from "@/components/AppShell";
+import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -38,49 +35,63 @@ export const Route = createFileRoute("/")({
       { title: "Visão Geral · Omni Automações" },
       {
         name: "description",
-        content:
-          "Painel executivo com vendas, clientes, tarefas e financeiro centralizados no Omni.",
+        content: "Resumo diário de caixa, funil comercial e pendências da Omni Automações.",
       },
     ],
   }),
-  component: DashboardOverview,
+  component: VisaoGeral,
 });
 
-/* ─── Funções Utilitárias ─── */
+/* ─── Helpers ─── */
+const fmtMoeda = (val: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(val) || 0);
 
-function formatCurrency(val: number | string | null | undefined): string {
-  const num = typeof val === "number" ? val : parseFloat(String(val || 0));
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(isNaN(num) ? 0 : num);
-}
+const fmtMoedaCurta = (val: number) => {
+  const n = Number(val) || 0;
+  if (Math.abs(n) >= 1000) {
+    return `R$ ${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+  }
+  return `R$ ${n.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+};
 
-function formatDate(dateStr?: string | null) {
-  if (!dateStr) return "-";
-  try {
-    const parts = dateStr.split("T")[0].split("-");
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
-  } catch {}
-  return dateStr;
-}
+const fmtDiaMes = (d?: string | null) => {
+  if (!d) return "—";
+  const parte = d.split("T")[0].split("-");
+  return parte.length === 3 ? `${parte[2]}/${parte[1]}` : d;
+};
 
-function todayISO() {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+const isoDe = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-function isReceitaPaga(statusStr?: string | null): boolean {
-  const s = (statusStr || "").toLowerCase();
-  return s === "recebido" || s === "pago" || s === "concluido";
-}
+const hojeISO = () => isoDe(new Date());
 
-const ETAPAS_ORDENADAS = [
+const addDiasISO = (base: string, dias: number) => {
+  const [y, m, d] = base.split("-").map(Number);
+  return isoDe(new Date(y, m - 1, d + dias));
+};
+
+const diasEntre = (de: string, ate: string) =>
+  Math.round(
+    (new Date(`${ate}T12:00:00`).getTime() - new Date(`${de}T12:00:00`).getTime()) / 86400000,
+  );
+
+const MESES_ABREV = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
+/* Ordem do funil comercial. Etapas fora desta lista entram no fim. */
+const ETAPAS = [
   "Novo Lead",
   "Tentando Contato",
   "Contato Realizado",
@@ -91,686 +102,757 @@ const ETAPAS_ORDENADAS = [
   "Venda Realizada",
 ];
 
-/* Painel flutuante de detalhamento de um KPI (aparece no hover do card). */
+const TOOLTIP_STYLE = {
+  background: "var(--omni-surface)",
+  border: "1px solid var(--omni-border)",
+  borderRadius: "var(--omni-radius-md)",
+  boxShadow: "var(--omni-shadow-md)",
+  fontSize: "var(--omni-text-xs)",
+  color: "var(--omni-text)",
+} as const;
 
-function KpiPopover({
-  title,
-  icon,
-  count,
-  emptyText,
-  children,
-  align = "left",
+/* Lançamento em aberto e vencido conta como atraso: o banco só grava
+   "pendente", nunca "atrasado". Mesma regra usada no Financeiro. */
+const emAberto = (status?: string | null) => status === "pendente" || status === "atrasado";
+
+/* ─── Blocos ─── */
+
+function Kpi({
+  label,
+  valor,
+  rodape,
+  icone,
+  tom,
 }: {
-  title: string;
-  icon: React.ReactNode;
-  count: string;
-  emptyText: string;
-  children: React.ReactNode;
-  align?: "left" | "right";
+  label: string;
+  valor: string;
+  rodape: React.ReactNode;
+  icone: React.ReactNode;
+  tom?: "negativo";
 }) {
-  const isEmpty = Array.isArray(children) ? children.length === 0 : !children;
   return (
-    <div
-      className={cn(
-        "omni-card omni-card--raised pointer-events-none absolute top-[calc(100%+8px)] z-[var(--omni-z-dropdown)] w-[320px] opacity-0 transition-opacity duration-[var(--omni-dur-fast)] ease-omni group-hover:pointer-events-auto group-hover:opacity-100",
-        align === "left" ? "left-0" : "right-0",
-      )}
-    >
-      <div className="omni-card__header py-3">
-        <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-          {icon}
-          {title}
-        </p>
-        <span className="omni-small shrink-0">{count}</span>
+    <div className="omni-card">
+      <div className="omni-stat">
+        <span className="omni-stat__label flex items-center gap-1.5">
+          {icone} {label}
+        </span>
+        <p className={cn("omni-stat__value num", tom === "negativo" && "text-danger")}>{valor}</p>
+        <p className="omni-stat__foot">{rodape}</p>
       </div>
-      {isEmpty ? (
-        <p className="omni-small px-5 py-4">{emptyText}</p>
-      ) : (
-        <div className="omni-list max-h-56 overflow-y-auto scrollbar-slim">{children}</div>
-      )}
     </div>
   );
 }
 
-function DashboardOverview() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const todayStr = todayISO();
+/* Contador acionável: mostra o que exige decisão e leva direto para a tela. */
+function Pendencia({
+  titulo,
+  quantidade,
+  detalhe,
+  para,
+  icone,
+  alerta,
+}: {
+  titulo: string;
+  quantidade: number;
+  detalhe: string;
+  para: string;
+  icone: React.ReactNode;
+  alerta?: boolean;
+}) {
+  const vazio = quantidade === 0;
+  return (
+    <Link
+      to={para}
+      className={cn(
+        "omni-card flex items-center gap-3 p-4 transition-colors duration-[var(--omni-dur-fast)] ease-omni",
+        "hover:border-line-strong",
+        alerta && !vazio && "border-danger",
+      )}
+    >
+      <span
+        className={cn(
+          "grid size-9 shrink-0 place-items-center rounded-lg",
+          vazio
+            ? "bg-surface-3 text-ink-faint"
+            : alerta
+              ? "bg-danger-soft text-danger"
+              : "bg-primary-soft text-primary-soft-fg",
+        )}
+        aria-hidden="true"
+      >
+        {icone}
+      </span>
 
-  /* 1. Fetch Leads */
-  const { data: leads = [], isLoading: isLoadingLeads } = useQuery({
-    queryKey: ["overview_leads"],
+      <div className="min-w-0 flex-1">
+        <p className="flex items-baseline gap-2">
+          <span
+            className={cn(
+              "num text-xl font-extrabold tracking-tight",
+              vazio ? "text-ink-faint" : alerta ? "text-danger" : "text-ink",
+            )}
+          >
+            {quantidade}
+          </span>
+          <span className="truncate text-sm font-medium text-ink-2">{titulo}</span>
+        </p>
+        <p className="omni-small truncate">{vazio ? "nada pendente" : detalhe}</p>
+      </div>
+
+      <ArrowRight className="size-4 shrink-0 text-ink-faint" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/* Leitura simples de uma tabela inteira — o volume aqui é de dezenas de
+   linhas, então agregar no cliente sai mais barato que várias idas ao banco. */
+function useTabela<T>(chave: string, tabela: string, colunas: string, habilitado: boolean) {
+  return useQuery<T[]>({
+    queryKey: [chave],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("*")
-        .order("criado_em", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  /* 2. Fetch Clientes */
-  const { data: clientes = [] } = useQuery({
-    queryKey: ["overview_clientes"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("*")
-        .order("valor_recorrente", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  /* 3. Fetch Receitas */
-  const { data: receitas = [] } = useQuery({
-    queryKey: ["overview_receitas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("receitas")
-        .select("*")
-        .order("data_vencimento", { ascending: true });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  /* 4. Fetch Tarefas */
-  const { data: tarefas = [], isLoading: isLoadingTarefas } = useQuery({
-    queryKey: ["overview_tarefas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tarefas")
-        .select("*, leads (lead_nome, lead_telefone)")
-        .order("criado_em", { ascending: false });
-      if (error) throw error;
-      return (data || []).map((t: any) => ({
-        ...t,
-        lead_nome: t.leads?.lead_nome,
-        lead_telefone: t.leads?.lead_telefone,
-      }));
-    },
-    enabled: !!user,
-  });
-  /* Toggle Tarefa Status Mutation */
-  const toggleTarefaMutation = useMutation({
-    mutationFn: async (t: any) => {
-      const nextStatus = t.status === "concluida" ? "pendente" : "concluida";
-      const { error } = await supabase
-        .from("tarefas")
-        .update({ status: nextStatus })
-        .eq("tarefa_id", t.tarefa_id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["overview_tarefas"] });
-      queryClient.invalidateQueries({ queryKey: ["tarefas"] });
-    },
-    onError: (err: any) => {
-      toast.error("Erro ao atualizar tarefa: " + err.message);
-    },
-  });
-
-  /* ─── Métricas & Listas para o Hover Popover ─── */
-  const metrics = useMemo(() => {
-    // 1. Receitas do mês corrente (status = 'recebido' ou 'pago')
-    const currentMonthPrefix = todayStr.substring(0, 7); // "YYYY-MM"
-    const receitasMes = receitas.filter((r: any) => {
-      const dt = r.data_recebimento || r.data_competencia || r.data_vencimento;
-      return dt && dt.startsWith(currentMonthPrefix) && isReceitaPaga(r.status);
-    });
-    const totalReceitaMes = receitasMes.reduce(
-      (acc: number, r: any) => acc + (Number(r.valor) || 0),
-      0,
-    );
-    // 2. MRR Recorrente (APENAS clientes ATIVOS, nunca cancelados ou pausados)
-    const clientesAtivos = clientes.filter((c: any) => (c.status || "").toLowerCase() === "ativo");
-    const clientesAtivosRecorrentes = clientesAtivos.filter(
-      (c: any) => (Number(c.valor_recorrente) || 0) > 0,
-    );
-    const mrrTotal = clientesAtivosRecorrentes.reduce(
-      (acc: number, c: any) => acc + (Number(c.valor_recorrente) || 0),
-      0,
-    );
-    // 3. Pipeline em aberto
-    const leadsAbertos = leads.filter(
-      (l: any) => l.lead_status === "Aberto" && l.lead_etapa_funil !== "Venda Realizada",
-    );
-    const pipelineAbertoValor = leadsAbertos.reduce(
-      (acc: number, l: any) => acc + (Number(l.lead_valor) || 0),
-      0,
-    );
-    // 4. Taxa de Conversão
-    const totalGanhos = leads.filter(
-      (l: any) => l.lead_status === "Ganho" || l.lead_etapa_funil === "Venda Realizada",
-    ).length;
-    const taxaConversao = leads.length > 0 ? (totalGanhos / leads.length) * 100 : 0;
-    // 5. Tarefas em atraso e vencendo hoje
-    const tarefasAtrasadas = tarefas.filter(
-      (t: any) => t.status !== "concluida" && t.data_vencimento && t.data_vencimento < todayStr,
-    );
-    const tarefasHoje = tarefas.filter(
-      (t: any) => t.status !== "concluida" && t.data_vencimento === todayStr,
-    );
-    return {
-      totalReceitaMes,
-      receitasMesList: receitasMes,
-      mrrTotal,
-      clientesAtivosCount: clientesAtivos.length,
-      clientesRecorrentesList: clientesAtivosRecorrentes,
-      pipelineAbertoValor,
-      leadsAbertosCount: leadsAbertos.length,
-      leadsAbertosList: leadsAbertos,
-      totalGanhos,
-      taxaConversao,
-      tarefasAtrasadasCount: tarefasAtrasadas.length,
-      tarefasHojeCount: tarefasHoje.length,
-      tarefasUrgentesList: [...tarefasAtrasadas, ...tarefasHoje],
-    };
-  }, [receitas, clientes, leads, tarefas, todayStr]);
-
-  /* ─── Gráfico do Funil de Conversão ─── */
-  const funnelData = useMemo(() => {
-    return ETAPAS_ORDENADAS.map((etapa) => {
-      const count = leads.filter((l: any) => (l.lead_etapa_funil || "Novo Lead") === etapa).length;
-      return { etapa, count };
-    });
-  }, [leads]);
-
-  /* ─── Gráfico Financeiro Mensal (Últimos 6 meses) ─── */
-  const financialChartData = useMemo(() => {
-    const monthsMap: Record<string, { m: string; realizado: number; previsto: number }> = {};
-    const monthNames = [
-      "Jan",
-      "Fev",
-      "Mar",
-      "Abr",
-      "Mai",
-      "Jun",
-      "Jul",
-      "Ago",
-      "Set",
-      "Out",
-      "Nov",
-      "Dez",
-    ];
-    const d = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const targetDate = new Date(d.getFullYear(), d.getMonth() - i, 1);
-      const key = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}`;
-      const label = `${monthNames[targetDate.getMonth()]}/${String(targetDate.getFullYear()).slice(2)}`;
-      monthsMap[key] = { m: label, realizado: 0, previsto: 0 };
-    }
-    receitas.forEach((r: any) => {
-      const dt = r.data_recebimento || r.data_competencia || r.data_vencimento;
-      if (!dt) return;
-      const key = dt.substring(0, 7);
-      if (monthsMap[key]) {
-        if (isReceitaPaga(r.status)) {
-          monthsMap[key].realizado += Number(r.valor) || 0;
-        } else if (r.status === "pendente" || r.status === "atrasado") {
-          monthsMap[key].previsto += Number(r.valor) || 0;
-        }
+      const { data, error } = await supabase.from(tabela).select(colunas);
+      if (error) {
+        console.error(`Erro ao buscar ${tabela}:`, error);
+        return [];
       }
-    });
-    return Object.values(monthsMap);
-  }, [receitas]);
+      return (data || []) as T[];
+    },
+    enabled: habilitado,
+  });
+}
 
-  /* ─── Top 5 Tarefas Urgentes ─── */
-  const urgentTasks = useMemo(() => {
-    const pending = tarefas.filter((t: any) => t.status !== "concluida");
-    pending.sort((a: any, b: any) => {
-      const dateA = a.data_vencimento || "9999-99-99";
-      const dateB = b.data_vencimento || "9999-99-99";
-      return dateA > dateB ? 1 : -1;
-    });
-    return pending.slice(0, 5);
-  }, [tarefas]);
+/* ─── Página ─── */
+function VisaoGeral() {
+  const { user } = useAuth();
+  const logado = !!user;
+  const hoje = hojeISO();
+  const chaveMesAtual = hoje.slice(0, 7);
 
-  /* ─── Últimos Leads / Fechamentos ─── */
-  const recentLeads = useMemo(() => {
-    return leads.slice(0, 5);
+  const { data: leads = [], isLoading: carregandoLeads } = useTabela<{
+    lead_id: string;
+    lead_nome: string | null;
+    lead_status: string | null;
+    lead_etapa_funil: string | null;
+    lead_valor: number | null;
+    criado_em: string;
+  }>(
+    "visao_leads",
+    "leads",
+    "lead_id, lead_nome, lead_status, lead_etapa_funil, lead_valor, criado_em",
+    logado,
+  );
+
+  const { data: clientes = [] } = useTabela<{
+    cliente_id: string;
+    status: string | null;
+    valor_recorrente: number | null;
+    valor_contrato: number | null;
+  }>("visao_clientes", "clientes", "cliente_id, status, valor_recorrente, valor_contrato", logado);
+
+  const { data: receitas = [] } = useTabela<{
+    receita_id: string;
+    descricao: string | null;
+    valor: number | null;
+    status: string | null;
+    data_vencimento: string;
+    cliente_nome: string | null;
+  }>(
+    "visao_receitas",
+    "receitas",
+    "receita_id, descricao, valor, status, data_vencimento, cliente_nome",
+    logado,
+  );
+
+  const { data: despesas = [] } = useTabela<{
+    despesa_id: string;
+    descricao: string | null;
+    valor_parcela: number | null;
+    status: string | null;
+    data_vencimento: string;
+    fornecedor: string | null;
+  }>(
+    "visao_despesas",
+    "despesas",
+    "despesa_id, descricao, valor_parcela, status, data_vencimento, fornecedor",
+    logado,
+  );
+
+  const { data: tarefas = [] } = useTabela<{
+    tarefa_id: string;
+    titulo: string | null;
+    status: string | null;
+    data_vencimento: string | null;
+  }>("visao_tarefas", "tarefas", "tarefa_id, titulo, status, data_vencimento", logado);
+
+  const { data: orcamentos = [] } = useTabela<{
+    orcamento_id: number;
+    lead_id: string | null;
+  }>("visao_orcamentos", "orcamentos", "orcamento_id, lead_id", logado);
+
+  const { data: mensagens = [] } = useTabela<{
+    lead_id: string | null;
+    criado_em: string;
+  }>("visao_mensagens", "mensagens", "lead_id, criado_em", logado);
+
+  /* ── Dinheiro ── */
+  const caixa = useMemo(() => {
+    let entrouMes = 0;
+    let aReceberMes = 0;
+    let saiuMes = 0;
+    let aPagarMes = 0;
+
+    receitas.forEach((r) => {
+      if (r.status === "cancelado") return;
+      if (!(r.data_vencimento || "").startsWith(chaveMesAtual)) return;
+      const v = Number(r.valor) || 0;
+      if (r.status === "recebido") entrouMes += v;
+      else if (emAberto(r.status)) aReceberMes += v;
+    });
+
+    despesas.forEach((d) => {
+      if (d.status === "cancelado") return;
+      if (!(d.data_vencimento || "").startsWith(chaveMesAtual)) return;
+      const v = Number(d.valor_parcela) || 0;
+      if (d.status === "pago") saiuMes += v;
+      else if (emAberto(d.status)) aPagarMes += v;
+    });
+
+    return {
+      entrouMes,
+      aReceberMes,
+      saiuMes,
+      aPagarMes,
+      saldoRealizado: entrouMes - saiuMes,
+      saldoPrevisto: entrouMes + aReceberMes - (saiuMes + aPagarMes),
+    };
+  }, [receitas, despesas, chaveMesAtual]);
+
+  const mrr = useMemo(
+    () =>
+      clientes
+        .filter((c) => c.status === "ativo")
+        .reduce((soma, c) => soma + (Number(c.valor_recorrente) || 0), 0),
+    [clientes],
+  );
+
+  const clientesAtivos = useMemo(
+    () => clientes.filter((c) => c.status === "ativo").length,
+    [clientes],
+  );
+
+  /* ── Comercial ── */
+  const comercial = useMemo(() => {
+    const ganhos = leads.filter((l) => l.lead_status === "Ganho");
+    const perdidos = leads.filter((l) => l.lead_status === "Perdido");
+    const abertos = leads.filter((l) => l.lead_status === "Aberto");
+
+    const ganhosMes = ganhos.filter((l) => (l.criado_em || "").slice(0, 7) === chaveMesAtual);
+    const decididos = ganhos.length + perdidos.length;
+
+    return {
+      ganhos,
+      abertos,
+      ganhosMes,
+      valorGanhoMes: ganhosMes.reduce((s, l) => s + (Number(l.lead_valor) || 0), 0),
+      valorEmAberto: abertos.reduce((s, l) => s + (Number(l.lead_valor) || 0), 0),
+      conversao: decididos > 0 ? (ganhos.length / decididos) * 100 : 0,
+      ticketMedio:
+        ganhos.length > 0
+          ? ganhos.reduce((s, l) => s + (Number(l.lead_valor) || 0), 0) / ganhos.length
+          : 0,
+    };
+  }, [leads, chaveMesAtual]);
+
+  const funil = useMemo(() => {
+    const mapa = new Map<string, { qtd: number; valor: number }>();
+    leads.forEach((l) => {
+      const etapa = l.lead_etapa_funil || "Sem etapa";
+      const atual = mapa.get(etapa) || { qtd: 0, valor: 0 };
+      atual.qtd += 1;
+      atual.valor += Number(l.lead_valor) || 0;
+      mapa.set(etapa, atual);
+    });
+
+    const ordenadas = Array.from(mapa.entries()).sort((a, b) => {
+      const ia = ETAPAS.indexOf(a[0]);
+      const ib = ETAPAS.indexOf(b[0]);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+
+    const maior = Math.max(...ordenadas.map(([, v]) => v.qtd), 1);
+    return ordenadas.map(([etapa, v]) => ({ etapa, ...v, pct: (v.qtd / maior) * 100 }));
   }, [leads]);
-  const maxFunnelCount = Math.max(...funnelData.map((f) => f.count), 1);
+
+  /* ── Pendências do dia ── */
+  const contasVencidas = useMemo(() => {
+    const r = receitas.filter((x) => emAberto(x.status) && x.data_vencimento < hoje).length;
+    const d = despesas.filter((x) => emAberto(x.status) && x.data_vencimento < hoje).length;
+    return r + d;
+  }, [receitas, despesas, hoje]);
+
+  const tarefasPendentes = useMemo(
+    () =>
+      tarefas.filter(
+        (t) =>
+          t.status !== "concluida" &&
+          t.status !== "concluída" &&
+          t.data_vencimento &&
+          t.data_vencimento <= hoje,
+      ).length,
+    [tarefas, hoje],
+  );
+
+  const orcamentosSemNegocio = useMemo(
+    () => orcamentos.filter((o) => !o.lead_id).length,
+    [orcamentos],
+  );
+
+  /* Negócio parado: aberto e sem mensagem nem criação nos últimos 7 dias. */
+  const negociosParados = useMemo(() => {
+    const ultimaAtividade = new Map<string, string>();
+    mensagens.forEach((m) => {
+      if (!m.lead_id) return;
+      const data = (m.criado_em || "").slice(0, 10);
+      const atual = ultimaAtividade.get(m.lead_id);
+      if (!atual || data > atual) ultimaAtividade.set(m.lead_id, data);
+    });
+
+    const limite = addDiasISO(hoje, -7);
+    return comercial.abertos.filter((l) => {
+      const referencia = ultimaAtividade.get(l.lead_id) || (l.criado_em || "").slice(0, 10);
+      return referencia < limite;
+    }).length;
+  }, [comercial.abertos, mensagens, hoje]);
+
+  /* ── Caixa dos próximos meses ── */
+  const projecao = useMemo(() => {
+    const agora = new Date();
+    const janela = [];
+    for (let offset = -2; offset <= 3; offset += 1) {
+      const d = new Date(agora.getFullYear(), agora.getMonth() + offset, 1);
+      janela.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: MESES_ABREV[d.getMonth()],
+        entradas: 0,
+        saidas: 0,
+      });
+    }
+    const porChave = new Map(janela.map((j) => [j.key, j]));
+
+    receitas.forEach((r) => {
+      if (r.status === "cancelado") return;
+      const alvo = porChave.get((r.data_vencimento || "").slice(0, 7));
+      if (alvo) alvo.entradas += Number(r.valor) || 0;
+    });
+    despesas.forEach((d) => {
+      if (d.status === "cancelado") return;
+      const alvo = porChave.get((d.data_vencimento || "").slice(0, 7));
+      if (alvo) alvo.saidas += Number(d.valor_parcela) || 0;
+    });
+
+    return janela.map((j) => ({
+      ...j,
+      entradas: Math.round(j.entradas),
+      saidas: Math.round(j.saidas),
+      saldo: Math.round(j.entradas - j.saidas),
+    }));
+  }, [receitas, despesas]);
+
+  /* ── Próximos vencimentos (7 dias) ── */
+  const proximosVencimentos = useMemo(() => {
+    const limite = addDiasISO(hoje, 7);
+    const itens: {
+      id: string;
+      descricao: string;
+      valor: number;
+      vencimento: string;
+      entrada: boolean;
+      atrasado: boolean;
+    }[] = [];
+
+    receitas.forEach((r) => {
+      if (!emAberto(r.status)) return;
+      if (r.data_vencimento > limite) return;
+      itens.push({
+        id: `r-${r.receita_id}`,
+        descricao: r.descricao || r.cliente_nome || "Receita",
+        valor: Number(r.valor) || 0,
+        vencimento: r.data_vencimento,
+        entrada: true,
+        atrasado: r.data_vencimento < hoje,
+      });
+    });
+
+    despesas.forEach((d) => {
+      if (!emAberto(d.status)) return;
+      if (d.data_vencimento > limite) return;
+      itens.push({
+        id: `d-${d.despesa_id}`,
+        descricao: d.descricao || d.fornecedor || "Despesa",
+        valor: Number(d.valor_parcela) || 0,
+        vencimento: d.data_vencimento,
+        entrada: false,
+        atrasado: d.data_vencimento < hoje,
+      });
+    });
+
+    return itens.sort((a, b) => a.vencimento.localeCompare(b.vencimento)).slice(0, 8);
+  }, [receitas, despesas, hoje]);
+
+  /* ── Negócios em aberto por valor ── */
+  const negociosTop = useMemo(
+    () =>
+      [...comercial.abertos]
+        .sort((a, b) => (Number(b.lead_valor) || 0) - (Number(a.lead_valor) || 0))
+        .slice(0, 6),
+    [comercial.abertos],
+  );
+
   return (
     <AppShell
       title="Visão Geral"
-      subtitle="Vendas, clientes, financeiro e operação em tempo real"
+      subtitle="O essencial do dia: caixa, funil e o que precisa de decisão"
       actions={
         <Link to="/negocios" className="omni-btn omni-btn--primary omni-btn--sm">
           <Plus /> Novo negócio
         </Link>
       }
     >
-      <div className="omni-stack-6 w-full">
-        {/* ══════ 1. Indicadores do topo ══════ */}
+      <div className="omni-stack-6 w-full *:min-w-0">
+        {/* ═════ 1. Os quatro números que importam ═════ */}
         <section className="omni-grid omni-grid-4" aria-label="Indicadores principais">
-          {/* Receita paga no mês */}
-          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <DollarSign className="size-3.5" /> Receita paga (mês)
-              </span>
-              <p className="omni-stat__value">{formatCurrency(metrics.totalReceitaMes)}</p>
-              <p className="omni-stat__foot">
-                {metrics.receitasMesList.length} entradas pagas neste mês
-              </p>
-            </div>
-            <KpiPopover
-              title="Lançamentos pagos no mês"
-              icon={<TrendingUp className="size-4 text-ink-3" />}
-              count={`${metrics.receitasMesList.length} itens`}
-              emptyText="Nenhuma receita paga registrada neste mês."
-            >
-              {metrics.receitasMesList.map((r: any) => (
-                <div key={r.receita_id} className="omni-list__item">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{r.descricao}</p>
-                    <p className="omni-small">
-                      {formatDate(r.data_recebimento || r.data_vencimento)}
-                    </p>
-                  </div>
-                  <span className="num shrink-0 text-sm font-semibold text-ink">
-                    {formatCurrency(r.valor)}
-                  </span>
-                </div>
-              ))}
-            </KpiPopover>
-          </div>
-          {/* MRR recorrente */}
-          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <Building2 className="size-3.5" /> MRR recorrente
-              </span>
-              <p className="omni-stat__value">
-                {formatCurrency(metrics.mrrTotal)}
-                <small>/mês</small>
-              </p>
-              <p className="omni-stat__foot">
-                {metrics.clientesRecorrentesList.length} clientes ativos com mensalidade
-              </p>
-            </div>
-            <KpiPopover
-              title="Clientes ativos e mensalidades"
-              icon={<Users className="size-4 text-ink-3" />}
-              count={`${metrics.clientesRecorrentesList.length} ativos`}
-              emptyText="Nenhum cliente ativo com mensalidade recorrente."
-            >
-              {metrics.clientesRecorrentesList.map((c: any) => (
-                <div key={c.cliente_id} className="omni-list__item">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{c.nome}</p>
-                    {c.empresa && <p className="omni-small truncate">{c.empresa}</p>}
-                  </div>
-                  <span className="num shrink-0 text-sm font-semibold text-ink">
-                    {formatCurrency(c.valor_recorrente)}/mês
-                  </span>
-                </div>
-              ))}
-            </KpiPopover>
-          </div>
-          {/* Pipeline em aberto */}
-          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                <Target className="size-3.5" /> Pipeline em aberto
-              </span>
-              <p className="omni-stat__value">{formatCurrency(metrics.pipelineAbertoValor)}</p>
-              <p className="omni-stat__foot">
-                {metrics.leadsAbertosCount} negociações em andamento
-              </p>
-            </div>
-            <KpiPopover
-              title="Negociações no funil"
-              icon={<Clock className="size-4 text-ink-3" />}
-              count={`${metrics.leadsAbertosCount} em aberto`}
-              emptyText="Nenhum negócio em aberto no momento."
-            >
-              {metrics.leadsAbertosList.map((l: any) => (
-                <div key={l.lead_id} className="omni-list__item">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">
-                      {l.lead_nome || l.lead_telefone || "Sem nome"}
-                    </p>
-                    <p className="omni-small truncate">{l.lead_etapa_funil || "Novo Lead"}</p>
-                  </div>
-                  <span className="num shrink-0 text-sm font-semibold text-ink">
-                    {formatCurrency(l.lead_valor)}
-                  </span>
-                </div>
-              ))}
-            </KpiPopover>
-          </div>
-          {/* Rotina comercial */}
-          <div className="omni-card group relative z-10 cursor-default hover:z-[var(--omni-z-dropdown)]">
-            <div className="omni-stat">
-              <span className="omni-stat__label flex items-center gap-1.5">
-                {metrics.tarefasAtrasadasCount > 0 ? (
-                  <AlertTriangle className="size-3.5" />
-                ) : (
-                  <CheckCircle2 className="size-3.5" />
-                )}
-                Rotina comercial
-              </span>
-              <p
-                className={cn(
-                  "omni-stat__value",
-                  metrics.tarefasAtrasadasCount > 0 && "text-danger",
-                )}
-              >
-                {metrics.tarefasAtrasadasCount}
-                <small>atrasadas</small>
-              </p>
-              <p className="omni-stat__foot">
-                {metrics.tarefasAtrasadasCount > 0 ? (
-                  <span className="omni-badge omni-badge--danger">Ação necessária</span>
-                ) : (
-                  <span className="omni-badge omni-badge--success">Em dia</span>
-                )}
-                <span>{metrics.tarefasHojeCount} vencem hoje</span>
-              </p>
-            </div>
-            <KpiPopover
-              align="right"
-              title="Tarefas atrasadas e de hoje"
-              icon={<AlertTriangle className="size-4 text-ink-3" />}
-              count={`${metrics.tarefasUrgentesList.length} tarefas`}
-              emptyText="Nenhuma tarefa atrasada ou para hoje."
-            >
-              {metrics.tarefasUrgentesList.map((t: any) => {
-                const isAtrasada = t.data_vencimento && t.data_vencimento < todayStr;
-                return (
-                  <div key={t.tarefa_id} className="omni-list__item">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink">{t.titulo}</p>
-                      {t.lead_nome && <p className="omni-small truncate">{t.lead_nome}</p>}
-                    </div>
-                    <span
-                      className={cn(
-                        "omni-badge shrink-0",
-                        isAtrasada ? "omni-badge--danger" : "omni-badge--warning",
-                      )}
-                    >
-                      {isAtrasada ? "Atrasada" : "Hoje"}
-                    </span>
-                  </div>
-                );
-              })}
-            </KpiPopover>
+          <Kpi
+            label="Receita recorrente"
+            valor={fmtMoeda(mrr)}
+            icone={<Repeat className="size-3.5" />}
+            rodape={
+              <>
+                <span className="num">{clientesAtivos}</span>{" "}
+                {clientesAtivos === 1 ? "cliente ativo" : "clientes ativos"}
+              </>
+            }
+          />
+          <Kpi
+            label="Vendas do mês"
+            valor={fmtMoeda(comercial.valorGanhoMes)}
+            icone={<TrendingUp className="size-3.5" />}
+            rodape={
+              <>
+                <span className="num">{comercial.ganhosMes.length}</span>{" "}
+                {comercial.ganhosMes.length === 1 ? "negócio fechado" : "negócios fechados"}
+              </>
+            }
+          />
+          <Kpi
+            label="A receber no mês"
+            valor={fmtMoeda(caixa.aReceberMes)}
+            icone={<Wallet className="size-3.5" />}
+            rodape={
+              <>
+                <span className="num">{fmtMoeda(caixa.entrouMes)}</span> já entrou
+              </>
+            }
+          />
+          <Kpi
+            label="Saldo previsto do mês"
+            valor={fmtMoeda(caixa.saldoPrevisto)}
+            tom={caixa.saldoPrevisto < 0 ? "negativo" : undefined}
+            icone={<CalendarClock className="size-3.5" />}
+            rodape={
+              <>
+                <span className="num">{fmtMoeda(caixa.aPagarMes)}</span> ainda a pagar
+              </>
+            }
+          />
+        </section>
+
+        {/* ═════ 2. O que precisa de decisão hoje ═════ */}
+        <section aria-label="Pendências">
+          <h2 className="omni-h4 mb-3">Precisa de você</h2>
+          <div className="omni-grid omni-grid-4">
+            <Pendencia
+              titulo="contas vencidas"
+              quantidade={contasVencidas}
+              detalhe="em aberto depois do vencimento"
+              para="/financeiro"
+              icone={<AlertCircle className="size-4" />}
+              alerta
+            />
+            <Pendencia
+              titulo="tarefas atrasadas"
+              quantidade={tarefasPendentes}
+              detalhe="vencem hoje ou já venceram"
+              para="/tarefas"
+              icone={<CheckSquare className="size-4" />}
+              alerta
+            />
+            <Pendencia
+              titulo="negócios parados"
+              quantidade={negociosParados}
+              detalhe="sem contato há mais de 7 dias"
+              para="/negocios"
+              icone={<Handshake className="size-4" />}
+            />
+            <Pendencia
+              titulo="orçamentos soltos"
+              quantidade={orcamentosSemNegocio}
+              detalhe="sem negócio vinculado"
+              para="/orcamentos"
+              icone={<Calculator className="size-4" />}
+            />
           </div>
         </section>
 
-        {/* ══════ 2. Gráficos ══════ */}
-        <section className="grid gap-6 lg:grid-cols-3">
-          {/* Faturamento realizado vs. previsto */}
-          <div className="omni-card lg:col-span-2">
-            <div className="omni-card__header">
-              <div>
-                <h2 className="omni-h4">Faturamento realizado e previsto</h2>
-                <p className="omni-small mt-0.5">Últimos 6 meses, em reais</p>
-              </div>
-            </div>
-            <div className="omni-card__body">
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={financialChartData}
-                    margin={{ left: 4, right: 8, top: 8, bottom: 0 }}
-                    barGap={2}
-                  >
-                    <CartesianGrid
-                      stroke="var(--omni-chart-grid)"
-                      strokeDasharray="3 3"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="m"
-                      stroke="var(--omni-chart-axis)"
-                      tick={{ fill: "var(--omni-text-3)", fontSize: 11 }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      stroke="var(--omni-chart-axis)"
-                      tick={{ fill: "var(--omni-text-3)", fontSize: 10 }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={56}
-                      tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)} mil`}
-                    />
-                    <Tooltip
-                      cursor={{ fill: "var(--omni-surface-2)" }}
-                      contentStyle={{
-                        background: "var(--omni-surface)",
-                        border: "1px solid var(--omni-border)",
-                        borderRadius: "var(--omni-radius-md)",
-                        boxShadow: "var(--omni-shadow-md)",
-                        fontSize: "var(--omni-text-xs)",
-                        color: "var(--omni-text)",
-                      }}
-                      labelStyle={{ color: "var(--omni-text)", fontWeight: 700 }}
-                      formatter={(val: any, name: any) => [formatCurrency(val), name]}
-                    />
-                    <Legend
-                      iconType="circle"
-                      iconSize={8}
-                      wrapperStyle={{
-                        fontSize: "var(--omni-text-xs)",
-                        color: "var(--omni-text-2)",
-                        paddingTop: 8,
-                      }}
-                    />
-                    <Bar
-                      dataKey="realizado"
-                      name="Realizado"
-                      fill="var(--omni-chart-1)"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="previsto"
-                      name="Previsto"
-                      fill="var(--omni-chart-2)"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-          {/* Funil comercial */}
-          <div className="omni-card flex flex-col">
+        {/* ═════ 3. Funil + projeção de caixa ═════ */}
+        <div className="grid gap-4 lg:grid-cols-2 *:min-w-0">
+          <section className="omni-card">
             <div className="omni-card__header">
               <div>
                 <h2 className="omni-h4">Funil comercial</h2>
-                <p className="omni-small mt-0.5">{leads.length} leads no total</p>
+                <p className="omni-small mt-0.5">
+                  {leads.length} {leads.length === 1 ? "negócio" : "negócios"} ·{" "}
+                  {comercial.conversao.toFixed(0)}% de conversão
+                </p>
               </div>
-              <Link to="/negocios" className="omni-link shrink-0 text-xs">
-                Ver funil
+              <Link to="/negocios" className="omni-btn omni-btn--quiet omni-btn--sm">
+                Abrir funil
               </Link>
             </div>
-            <div className="omni-card__body flex-1">
-              {isLoadingLeads ? (
-                <div className="flex flex-col gap-3">
-                  {ETAPAS_ORDENADAS.map((e) => (
-                    <div key={e} className="omni-skeleton h-8 w-full" />
+
+            <div className="omni-card__body">
+              {carregandoLeads ? (
+                <div className="omni-stack-2">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="omni-skeleton h-8 w-full" />
                   ))}
                 </div>
-              ) : leads.length === 0 ? (
-                <div className="omni-empty">
-                  <h4>Nenhum lead cadastrado</h4>
-                  <p>Cadastre o primeiro negócio para o funil começar a mostrar as etapas.</p>
-                </div>
+              ) : funil.length === 0 ? (
+                <p className="omni-small">Nenhum negócio cadastrado ainda.</p>
               ) : (
-                <div className="flex flex-col gap-3">
-                  {funnelData.map((f) => {
-                    const largura = (f.count / maxFunnelCount) * 100;
-                    return (
-                      <div key={f.etapa} className="flex flex-col gap-1.5">
-                        <div className="flex items-baseline justify-between gap-3 text-xs">
-                          <span className="truncate font-medium text-ink-2">{f.etapa}</span>
-                          <span className="num shrink-0 font-semibold text-ink">{f.count}</span>
-                        </div>
-                        <div className="omni-progress">
-                          <div
-                            className="omni-progress__bar"
-                            style={{ width: `${Math.max(largura, 2)}%` }}
-                          />
-                        </div>
+                <ul className="omni-stack-2">
+                  {funil.map((etapa) => (
+                    <li key={etapa.etapa}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="truncate text-sm font-medium text-ink">{etapa.etapa}</span>
+                        <span className="num shrink-0 text-sm text-ink-2">
+                          {etapa.qtd}
+                          {etapa.valor > 0 && (
+                            <span className="omni-muted"> · {fmtMoedaCurta(etapa.valor)}</span>
+                          )}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="omni-progress mt-1.5">
+                        <div
+                          className="omni-progress__bar"
+                          style={{ width: `${Math.max(etapa.pct, 3)}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </div>
-            <div className="omni-card__footer justify-between">
-              <span className="omni-small">Taxa de conversão</span>
-              <span className="num text-sm font-bold text-ink">
-                {metrics.taxaConversao.toFixed(1).replace(".", ",")}%
-              </span>
-            </div>
-          </div>
-        </section>
 
-        {/* ══════ 3. Tarefas e oportunidades ══════ */}
-        <section className="grid gap-6 md:grid-cols-2">
-          {/* Tarefas urgentes */}
-          <div className="omni-card">
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line-subtle pt-3">
+                <div>
+                  <p className="omni-small">Em negociação</p>
+                  <p className="num text-md font-bold text-ink">
+                    {fmtMoeda(comercial.valorEmAberto)}
+                  </p>
+                </div>
+                <div>
+                  <p className="omni-small">Ticket médio ganho</p>
+                  <p className="num text-md font-bold text-ink">
+                    {fmtMoeda(comercial.ticketMedio)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="omni-card">
             <div className="omni-card__header">
               <div>
-                <h2 className="omni-h4 flex items-center gap-2">
-                  <CalendarDays className="size-4 text-ink-3" /> Tarefas urgentes
-                </h2>
-                <p className="omni-small mt-0.5">Pendências comerciais e follow-ups</p>
+                <h2 className="omni-h4">Caixa dos próximos meses</h2>
+                <p className="omni-small mt-0.5">Entradas e saídas por data de vencimento</p>
               </div>
-              <Link to="/tarefas" className="omni-link shrink-0 text-xs">
-                Ver todas ({tarefas.length})
+              <Link to="/financeiro" className="omni-btn omni-btn--quiet omni-btn--sm">
+                Ver financeiro
               </Link>
             </div>
-            {isLoadingTarefas ? (
-              <div className="omni-card__body flex flex-col gap-2">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div key={i} className="omni-skeleton h-row w-full" />
-                ))}
+
+            <div className="omni-card__body">
+              <div className="omni-scroll-x scrollbar-slim">
+                <div className="h-56 min-w-[420px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart
+                      data={projecao}
+                      margin={{ left: 4, right: 8, top: 8 }}
+                      barGap={2}
+                    >
+                      <CartesianGrid
+                        stroke="var(--omni-chart-grid)"
+                        strokeDasharray="3 3"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: "var(--omni-text-3)", fontSize: 11 }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        width={70}
+                        tick={{ fill: "var(--omni-text-3)", fontSize: 10 }}
+                        tickFormatter={(v) => fmtMoedaCurta(Number(v))}
+                      />
+                      <Tooltip
+                        cursor={{ fill: "var(--omni-surface-2)" }}
+                        contentStyle={TOOLTIP_STYLE}
+                        labelStyle={{ color: "var(--omni-text)", fontWeight: 700 }}
+                        formatter={(val: number | string, name: string) => [
+                          fmtMoeda(Number(val)),
+                          name,
+                        ]}
+                      />
+                      <Bar
+                        dataKey="entradas"
+                        name="Entradas"
+                        fill="var(--omni-chart-1)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="saidas"
+                        name="Saídas"
+                        fill="var(--omni-chart-2)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="saldo"
+                        name="Saldo"
+                        stroke="var(--omni-text-2)"
+                        strokeWidth={2}
+                        dot={{ r: 2.5, fill: "var(--omni-text-2)" }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-            ) : urgentTasks.length === 0 ? (
+            </div>
+          </section>
+        </div>
+
+        {/* ═════ 4. Vencimentos + negócios em aberto ═════ */}
+        <div className="grid gap-4 lg:grid-cols-2 *:min-w-0">
+          <section className="omni-card">
+            <div className="omni-card__header">
+              <div>
+                <h2 className="omni-h4">Vence nos próximos 7 dias</h2>
+                <p className="omni-small mt-0.5">Incluindo o que já passou do vencimento</p>
+              </div>
+            </div>
+
+            {proximosVencimentos.length === 0 ? (
               <div className="omni-empty">
                 <span className="omni-empty__art">
-                  <CheckCircle2 />
+                  <CalendarClock />
                 </span>
-                <h4>Nenhuma tarefa pendente</h4>
-                <p>Tudo em dia. Novas tarefas aparecem aqui assim que forem criadas.</p>
+                <h4>Nada vencendo por agora</h4>
+                <p>Nenhuma conta em aberto com vencimento nos próximos sete dias.</p>
               </div>
             ) : (
-              <div className="omni-list">
-                {urgentTasks.map((t: any) => {
-                  const isAtrasada = t.data_vencimento && t.data_vencimento < todayStr;
-                  const isHoje = t.data_vencimento === todayStr;
-                  return (
-                    <div key={t.tarefa_id} className="omni-list__item">
-                      <button
-                        type="button"
-                        onClick={() => toggleTarefaMutation.mutate(t)}
-                        className="shrink-0 rounded-xs text-ink-faint transition-colors hover:text-success"
-                        title="Marcar como concluída"
-                      >
-                        <Square className="size-4" />
-                        <span className="omni-sr">Concluir tarefa {t.titulo}</span>
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-ink">{t.titulo}</p>
-                        {t.lead_id && (
-                          <Link
-                            to="/lead/$leadId"
-                            params={{ leadId: t.lead_id }}
-                            className="omni-link mt-0.5 inline-flex items-center gap-1 text-xs"
-                          >
-                            <ExternalLink className="size-3" /> {t.lead_nome || "Ver negócio"}
-                          </Link>
-                        )}
-                      </div>
-                      <div className="shrink-0">
-                        {isAtrasada ? (
-                          <span className="omni-badge omni-badge--danger">Atrasada</span>
-                        ) : isHoje ? (
-                          <span className="omni-badge omni-badge--warning">Vence hoje</span>
-                        ) : (
-                          <span className="num omni-small">{formatDate(t.data_vencimento)}</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <ul>
+                {proximosVencimentos.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center gap-3 border-b border-line-subtle px-5 py-2.5 last:border-b-0"
+                  >
+                    <span
+                      className={cn(
+                        "num w-12 shrink-0 text-xs font-semibold",
+                        item.atrasado ? "text-danger" : "text-ink-3",
+                      )}
+                    >
+                      {fmtDiaMes(item.vencimento)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                      {item.descricao}
+                    </span>
+                    {item.atrasado && (
+                      <span className="omni-badge omni-badge--danger shrink-0">vencida</span>
+                    )}
+                    <span
+                      className={cn(
+                        "num shrink-0 text-sm font-semibold",
+                        item.entrada ? "text-success" : "text-ink",
+                      )}
+                    >
+                      {item.entrada ? "+" : "−"}
+                      {fmtMoeda(item.valor)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-          {/* Oportunidades recentes */}
-          <div className="omni-card">
-            <div className="omni-card__header">
-              <div>
-                <h2 className="omni-h4 flex items-center gap-2">
-                  <Kanban className="size-4 text-ink-3" /> Últimas oportunidades
-                </h2>
-                <p className="omni-small mt-0.5">Contatos e negócios mais recentes</p>
-              </div>
-              <Link to="/negocios" className="omni-link shrink-0 text-xs">
-                Ver todos
+
+            <div className="omni-table__foot">
+              <Link to="/financeiro" className="omni-link">
+                Ver todos os lançamentos
               </Link>
             </div>
-            {isLoadingLeads ? (
-              <div className="omni-card__body flex flex-col gap-2">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div key={i} className="omni-skeleton h-row w-full" />
-                ))}
+          </section>
+
+          <section className="omni-card">
+            <div className="omni-card__header">
+              <div>
+                <h2 className="omni-h4">Maiores negócios em aberto</h2>
+                <p className="omni-small mt-0.5">Oportunidades ainda em negociação</p>
               </div>
-            ) : recentLeads.length === 0 ? (
+            </div>
+
+            {negociosTop.length === 0 ? (
               <div className="omni-empty">
-                <h4>Nenhuma oportunidade ainda</h4>
-                <p>Cadastre um negócio para acompanhar as entradas mais recentes por aqui.</p>
+                <span className="omni-empty__art">
+                  <Handshake />
+                </span>
+                <h4>Nenhum negócio em aberto</h4>
+                <p>Cadastre uma oportunidade para acompanhar o funil por aqui.</p>
               </div>
             ) : (
-              <div className="omni-list">
-                {recentLeads.map((lead: any) => {
-                  const isGanho =
-                    lead.lead_status === "Ganho" || lead.lead_etapa_funil === "Venda Realizada";
-                  return (
+              <ul>
+                {negociosTop.map((lead) => (
+                  <li key={lead.lead_id} className="border-b border-line-subtle last:border-b-0">
                     <Link
-                      key={lead.lead_id}
                       to="/lead/$leadId"
                       params={{ leadId: lead.lead_id }}
-                      className="omni-list__item no-underline"
+                      className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-2"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-ink">
-                          {lead.lead_nome || lead.lead_telefone || "Sem nome"}
+                          {lead.lead_nome || "Sem nome"}
                         </p>
                         <p className="omni-small truncate">
-                          {lead.lead_origem || "Meta Ads"} · {formatDate(lead.criado_em)}
+                          {lead.lead_etapa_funil || "Sem etapa"} · aberto há{" "}
+                          {diasEntre((lead.criado_em || "").slice(0, 10), hoje)}d
                         </p>
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="num text-sm font-semibold text-ink">
-                          {formatCurrency(lead.lead_valor)}
-                        </span>
-                        <span
-                          className={cn(
-                            "omni-badge",
-                            isGanho ? "omni-badge--success" : "omni-badge--outline",
-                          )}
-                        >
-                          {lead.lead_etapa_funil || "Novo Lead"}
-                        </span>
-                      </div>
+                      <span className="num shrink-0 text-sm font-semibold text-ink">
+                        {fmtMoeda(Number(lead.lead_valor) || 0)}
+                      </span>
                     </Link>
-                  );
-                })}
-              </div>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-        </section>
+
+            <div className="omni-table__foot">
+              <Link to="/negocios" className="omni-link">
+                Abrir o funil completo
+              </Link>
+            </div>
+          </section>
+        </div>
       </div>
     </AppShell>
   );

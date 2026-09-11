@@ -308,7 +308,7 @@ function Negocios() {
       }
       flush
     >
-      <div className="flex h-[calc(100vh-var(--omni-topbar-h))] flex-col">
+      <div className="flex h-full flex-col">
         {/* ── Filtros ── */}
         <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-3">
           <div className="omni-input-group min-w-[220px] flex-1 md:max-w-sm">

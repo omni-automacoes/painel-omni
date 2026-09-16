@@ -1,6 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -15,6 +27,7 @@ import {
   XCircle,
   Filter,
   Inbox,
+  GripVertical,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
@@ -170,6 +183,15 @@ function Negocios() {
   const [statusFilter, setStatusFilter] = useState<string>("Aberto");
   const [origemFilter, setOrigemFilter] = useState<string>("Todas");
   const [isNewDealOpen, setIsNewDealOpen] = useState(false);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  /* Sensores do arrastar: o mouse precisa andar alguns pixels para começar o arraste
+     (senão o clique de abrir a ficha seria engolido); no toque, segurar por 200ms
+     para não brigar com a rolagem da coluna. */
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+  );
 
   /* Fetch leads from Supabase */
   const {
@@ -212,6 +234,91 @@ function Negocios() {
     },
     enabled: !!user,
   });
+
+  /* Mover negócio de etapa (arrastar e soltar), com atualização otimista.
+     Mesmas regras da ficha do lead: cair em "Venda Realizada" marca Ganho;
+     sair de um negócio Perdido reabre como Aberto. */
+  const moveStageMutation = useMutation({
+    mutationFn: async ({ lead, stage }: { lead: Lead; stage: string }) => {
+      const updates: Partial<Lead> =
+        stage === "Venda Realizada"
+          ? { lead_etapa_funil: stage, lead_status: "Ganho", motivo_perda_id: null }
+          : {
+              lead_etapa_funil: stage,
+              lead_status: lead.lead_status === "Perdido" ? "Aberto" : lead.lead_status,
+              ...(lead.lead_status === "Perdido" ? { motivo_perda_id: null } : {}),
+            };
+
+      const { error } = await supabase.from("leads").update(updates).eq("lead_id", lead.lead_id);
+      if (error) throw error;
+      return updates;
+    },
+    onMutate: async ({ lead, stage }) => {
+      await queryClient.cancelQueries({ queryKey: ["leads"] });
+      const previous = queryClient.getQueryData<Lead[]>(["leads"]);
+      queryClient.setQueryData<Lead[]>(["leads"], (old = []) =>
+        old.map((l) =>
+          l.lead_id === lead.lead_id
+            ? {
+                ...l,
+                lead_etapa_funil: stage,
+                lead_status:
+                  stage === "Venda Realizada"
+                    ? "Ganho"
+                    : l.lead_status === "Perdido"
+                      ? "Aberto"
+                      : l.lead_status,
+                motivo_perda_id:
+                  stage === "Venda Realizada" || l.lead_status === "Perdido"
+                    ? null
+                    : l.motivo_perda_id,
+              }
+            : l,
+        ),
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["leads"], ctx.previous);
+      toast.error("Não foi possível mover o negócio: " + err.message);
+    },
+    onSuccess: (updates, { lead, stage }) => {
+      const nome = lead.lead_nome || lead.lead_telefone || "Negócio";
+      if (updates.lead_status === "Ganho" && lead.lead_status !== "Ganho") {
+        toast.success(`🏆 ${nome} marcado como Ganho! Cliente cadastrado automaticamente.`);
+        queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      } else {
+        toast.success(`${nome} movido para "${stage}"`);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+    },
+  });
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const lead = leads.find((l) => l.lead_id === active.id);
+    const targetStage = String(over.id);
+    if (!lead) return;
+
+    const currentStage = lead.lead_etapa_funil?.trim() || "Novo Lead";
+    if (currentStage === targetStage) return;
+
+    moveStageMutation.mutate({ lead, stage: targetStage });
+  };
+
+  const activeLead = useMemo(
+    () => (activeDragId ? leads.find((l) => l.lead_id === activeDragId) || null : null),
+    [activeDragId, leads],
+  );
 
   /* Filtered leads */
   const filteredLeads = useMemo(() => {
@@ -401,109 +508,40 @@ function Negocios() {
             </div>
           </div>
         ) : (
-          <div className="omni-scroll-x flex flex-1 gap-4 p-5 scrollbar-slim">
-            {columns.map((col) => (
-              <section key={col.stage} className="flex w-[300px] shrink-0 flex-col">
-                <div className="flex items-start justify-between gap-2 rounded-t-lg border border-b-0 border-line bg-surface px-4 py-3">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-sm font-semibold text-ink">{col.stage}</h2>
-                    <p className="num omni-small">
-                      {col.deals.length} {col.deals.length === 1 ? "negócio" : "negócios"} ·{" "}
-                      {formatCurrency(col.total)}
-                    </p>
-                  </div>
-                  <span className="omni-badge omni-badge--outline shrink-0">
-                    {col.deals.length}
-                  </span>
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="omni-scroll-x flex flex-1 gap-4 p-5 scrollbar-slim">
+              {columns.map((col) => (
+                <StageColumn
+                  key={col.stage}
+                  stage={col.stage}
+                  total={col.total}
+                  count={col.deals.length}
+                  isDragging={!!activeDragId}
+                  onAdd={() => setIsNewDealOpen(true)}
+                >
+                  {col.deals.map((lead) => (
+                    <DraggableDealCard
+                      key={lead.lead_id}
+                      lead={lead}
+                      motivosPerda={motivosPerda}
+                      onOpen={() =>
+                        navigate({ to: "/lead/$leadId", params: { leadId: lead.lead_id } })
+                      }
+                    />
+                  ))}
+                </StageColumn>
+              ))}
+            </div>
+
+            {/* Clone do card que acompanha o cursor durante o arraste */}
+            <DragOverlay dropAnimation={null}>
+              {activeLead ? (
+                <div className="w-[276px] rotate-[1.5deg] cursor-grabbing shadow-lg">
+                  <DealCard lead={activeLead} motivosPerda={motivosPerda} />
                 </div>
-
-                <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-b-lg border border-line bg-surface-2 p-3 scrollbar-slim">
-                  {col.deals.map((lead) => {
-                    const utm = parseUtmData(lead.utm_data);
-                    const displayName = lead.lead_nome || lead.lead_telefone || "Sem nome";
-                    const displayVal = formatCurrency(lead.lead_valor);
-                    const tag = lead.lead_origem || utm?.source_app || utm?.ad_title || "Direct";
-
-                    const motivoObj = lead.motivo_perda_id
-                      ? motivosPerda.find((m) => m.motivo_id === lead.motivo_perda_id)
-                      : null;
-
-                    return (
-                      <button
-                        key={lead.lead_id}
-                        type="button"
-                        onClick={() =>
-                          navigate({ to: "/lead/$leadId", params: { leadId: lead.lead_id } })
-                        }
-                        className="omni-card group w-full cursor-pointer p-4 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:border-line-strong"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold leading-snug text-ink">
-                            {displayName}
-                          </p>
-                          {lead.lead_status === "Perdido" && (
-                            <span
-                              className="omni-badge omni-badge--danger shrink-0"
-                              title={motivoObj ? `Motivo: ${motivoObj.motivo_nome}` : "Perdido"}
-                            >
-                              <XCircle />
-                              {motivoObj ? motivoObj.motivo_nome : "Perdido"}
-                            </span>
-                          )}
-                          {lead.lead_status === "Ganho" && (
-                            <span className="omni-badge omni-badge--success shrink-0">
-                              <CheckCircle2 />
-                              Ganho
-                            </span>
-                          )}
-                        </div>
-
-                        {lead.lead_telefone && (
-                          <p className="num mt-1 flex items-center gap-1.5 text-xs text-ink-3">
-                            <Phone className="size-3.5" /> {lead.lead_telefone}
-                          </p>
-                        )}
-
-                        <p className="num mt-3 text-lg font-bold tracking-tight text-ink">
-                          {displayVal}
-                        </p>
-
-                        <div className="mt-3 flex items-center justify-between gap-2 border-t border-line-subtle pt-3">
-                          <span className="omni-badge omni-badge--brand max-w-[130px] truncate">
-                            {tag}
-                          </span>
-                          <span className="num flex items-center gap-2 text-xs text-ink-3">
-                            <CalendarDays className="size-3.5" /> {formatDate(lead.criado_em)}
-                            <span
-                              className="omni-avatar omni-avatar--sm"
-                              title={lead.lead_nome || "Negócio"}
-                            >
-                              {getInitials(lead.lead_nome)}
-                            </span>
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {col.deals.length === 0 && (
-                    <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-line-strong px-4 py-6 text-center">
-                      <Inbox className="size-5 text-ink-faint" />
-                      <p className="omni-small">Nenhum negócio nesta etapa</p>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setIsNewDealOpen(true)}
-                    className="rounded-md border border-dashed border-line-strong py-2 text-xs font-semibold text-ink-3 transition-colors duration-[var(--omni-dur-fast)] hover:border-primary hover:text-ink"
-                  >
-                    + Adicionar negócio
-                  </button>
-                </div>
-              </section>
-            ))}
-          </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </div>
 
@@ -530,6 +568,181 @@ function Negocios() {
         />
       )}
     </AppShell>
+  );
+}
+
+/* ─── Coluna do funil (área de soltura) ─── */
+function StageColumn({
+  stage,
+  total,
+  count,
+  isDragging,
+  onAdd,
+  children,
+}: {
+  stage: string;
+  total: number;
+  count: number;
+  isDragging: boolean;
+  onAdd: () => void;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
+
+  return (
+    <section className="flex w-[300px] shrink-0 flex-col" aria-label={`Etapa ${stage}`}>
+      <div
+        className={cn(
+          "flex items-start justify-between gap-2 rounded-t-lg border border-b-0 border-line bg-surface px-4 py-3 transition-colors duration-[var(--omni-dur-fast)]",
+          isOver && "border-primary bg-primary/5",
+        )}
+      >
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-ink">{stage}</h2>
+          <p className="num omni-small">
+            {count} {count === 1 ? "negócio" : "negócios"} · {formatCurrency(total)}
+          </p>
+        </div>
+        <span className="omni-badge omni-badge--outline shrink-0">{count}</span>
+      </div>
+
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "flex flex-1 flex-col gap-3 overflow-y-auto rounded-b-lg border border-line bg-surface-2 p-3 transition-colors duration-[var(--omni-dur-fast)] scrollbar-slim",
+          isDragging && "border-dashed border-line-strong",
+          isOver && "border-solid border-primary bg-primary/5",
+        )}
+      >
+        {children}
+
+        {count === 0 && (
+          <div
+            className={cn(
+              "flex flex-col items-center gap-2 rounded-md border border-dashed border-line-strong px-4 py-6 text-center transition-colors duration-[var(--omni-dur-fast)]",
+              isOver && "border-primary",
+            )}
+          >
+            <Inbox className="size-5 text-ink-faint" />
+            <p className="omni-small">{isOver ? "Solte aqui" : "Nenhum negócio nesta etapa"}</p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onAdd}
+          className="rounded-md border border-dashed border-line-strong py-2 text-xs font-semibold text-ink-3 transition-colors duration-[var(--omni-dur-fast)] hover:border-primary hover:text-ink"
+        >
+          + Adicionar negócio
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Card arrastável ─── */
+function DraggableDealCard({
+  lead,
+  motivosPerda,
+  onOpen,
+}: {
+  lead: Lead;
+  motivosPerda: MotivoPerda[];
+  onOpen: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: lead.lead_id,
+    data: { lead },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      role="button"
+      tabIndex={0}
+      aria-roledescription="negócio arrastável"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={cn(
+        "cursor-grab rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing",
+        isDragging && "opacity-30",
+      )}
+    >
+      <DealCard lead={lead} motivosPerda={motivosPerda} showGrip />
+    </div>
+  );
+}
+
+/* ─── Conteúdo visual do card (usado no quadro e no clone do arraste) ─── */
+function DealCard({
+  lead,
+  motivosPerda,
+  showGrip = false,
+}: {
+  lead: Lead;
+  motivosPerda: MotivoPerda[];
+  showGrip?: boolean;
+}) {
+  const utm = parseUtmData(lead.utm_data);
+  const displayName = lead.lead_nome || lead.lead_telefone || "Sem nome";
+  const displayVal = formatCurrency(lead.lead_valor);
+  const tag = lead.lead_origem || utm?.source_app || utm?.ad_title || "Direct";
+
+  const motivoObj = lead.motivo_perda_id
+    ? motivosPerda.find((m) => m.motivo_id === lead.motivo_perda_id)
+    : null;
+
+  return (
+    <div className="omni-card group w-full p-4 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni hover:border-line-strong">
+      <div className="flex items-start justify-between gap-2">
+        <p className="flex min-w-0 items-start gap-1.5 text-sm font-semibold leading-snug text-ink">
+          {showGrip && (
+            <GripVertical className="mt-0.5 size-3.5 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover:opacity-100" />
+          )}
+          <span className="truncate">{displayName}</span>
+        </p>
+        {lead.lead_status === "Perdido" && (
+          <span
+            className="omni-badge omni-badge--danger shrink-0"
+            title={motivoObj ? `Motivo: ${motivoObj.motivo_nome}` : "Perdido"}
+          >
+            <XCircle />
+            {motivoObj ? motivoObj.motivo_nome : "Perdido"}
+          </span>
+        )}
+        {lead.lead_status === "Ganho" && (
+          <span className="omni-badge omni-badge--success shrink-0">
+            <CheckCircle2 />
+            Ganho
+          </span>
+        )}
+      </div>
+
+      {lead.lead_telefone && (
+        <p className="num mt-1 flex items-center gap-1.5 text-xs text-ink-3">
+          <Phone className="size-3.5" /> {lead.lead_telefone}
+        </p>
+      )}
+
+      <p className="num mt-3 text-lg font-bold tracking-tight text-ink">{displayVal}</p>
+
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-line-subtle pt-3">
+        <span className="omni-badge omni-badge--brand max-w-[130px] truncate">{tag}</span>
+        <span className="num flex items-center gap-2 text-xs text-ink-3">
+          <CalendarDays className="size-3.5" /> {formatDate(lead.criado_em)}
+          <span className="omni-avatar omni-avatar--sm" title={lead.lead_nome || "Negócio"}>
+            {getInitials(lead.lead_nome)}
+          </span>
+        </span>
+      </div>
+    </div>
   );
 }
 

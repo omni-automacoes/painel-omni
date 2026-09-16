@@ -27,6 +27,7 @@ import {
   X,
   Unlink,
   Percent,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { cn } from "@/lib/utils";
@@ -206,6 +207,9 @@ function OrcamentosPage() {
 
   /* Modal de Atribuição de Lead */
   const [modalAssignOrcamento, setModalAssignOrcamento] = useState<OrcamentoRecord | null>(null);
+
+  /* Modal de Confirmação de Exclusão */
+  const [orcamentoToDelete, setOrcamentoToDelete] = useState<OrcamentoRecord | null>(null);
   const [leadModalSearch, setLeadModalSearch] = useState("");
 
   /* Respostas do Comercial às Perguntas Estratégicas (rascunho local por índice da pergunta) */
@@ -290,6 +294,35 @@ function OrcamentosPage() {
     },
     onError: (err: any) => {
       toast.error("Erro ao atribuir lead: " + err.message);
+    },
+  });
+
+  /* 3.2 Mutation para Excluir um Orçamento */
+  const deleteOrcamentoMutation = useMutation({
+    mutationFn: async (orcamentoId: number | string) => {
+      const { error } = await supabase.from("orcamentos").delete().eq("orcamento_id", orcamentoId);
+
+      if (error) throw error;
+      return orcamentoId;
+    },
+    onSuccess: (orcamentoId) => {
+      queryClient.invalidateQueries({ queryKey: ["orcamentos_list"] });
+
+      if (activeOrcamento && String(activeOrcamento.orcamento_id) === String(orcamentoId)) {
+        setActiveOrcamento(null);
+      }
+      if (
+        modalAssignOrcamento &&
+        String(modalAssignOrcamento.orcamento_id) === String(orcamentoId)
+      ) {
+        setModalAssignOrcamento(null);
+      }
+
+      setOrcamentoToDelete(null);
+      toast.success(`Orçamento ORC-${orcamentoId} excluído.`);
+    },
+    onError: (err: Error) => {
+      toast.error("Erro ao excluir orçamento: " + err.message);
     },
   });
 
@@ -900,6 +933,16 @@ function OrcamentosPage() {
                     {copied ? <Check /> : <Copy />}
                     {copied ? "Copiado" : "Copiar proposta"}
                   </button>
+
+                  {activeOrcamento.orcamento_id && (
+                    <button
+                      type="button"
+                      onClick={() => setOrcamentoToDelete(activeOrcamento)}
+                      className="omni-btn omni-btn--quiet omni-btn--sm text-danger"
+                    >
+                      <Trash2 /> Excluir
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1128,18 +1171,25 @@ function OrcamentosPage() {
                 const ideal = orc.opcoes_orcamento?.ideal;
                 const hasLead = !!orc.lead_id;
 
+                const openOrcamento = () => {
+                  setActiveOrcamento(orc);
+                  document.getElementById("omni-main")?.scrollTo({ top: 380, behavior: "smooth" });
+                };
+
                 return (
-                  <button
+                  <div
                     key={orc.orcamento_id || Math.random()}
-                    type="button"
-                    onClick={() => {
-                      setActiveOrcamento(orc);
-                      document
-                        .getElementById("omni-main")
-                        ?.scrollTo({ top: 380, behavior: "smooth" });
+                    role="button"
+                    tabIndex={0}
+                    onClick={openOrcamento}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openOrcamento();
+                      }
                     }}
                     className={cn(
-                      "omni-card group flex cursor-pointer flex-col gap-3 p-4 text-left transition-colors duration-[var(--omni-dur-fast)] ease-omni",
+                      "omni-card group flex cursor-pointer flex-col gap-3 p-4 text-left outline-none transition-colors duration-[var(--omni-dur-fast)] ease-omni focus-visible:ring-2 focus-visible:ring-primary",
                       isSelected ? "border-primary" : "hover:border-line-strong",
                     )}
                   >
@@ -1147,6 +1197,20 @@ function OrcamentosPage() {
                       <span className="omni-code">ORC-{orc.orcamento_id}</span>
                       <span className="num omni-small flex items-center gap-1">
                         <Clock className="size-3" /> {formatDate(orc.criado_em)}
+                        {orc.orcamento_id && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOrcamentoToDelete(orc);
+                            }}
+                            title="Excluir orçamento"
+                            aria-label={`Excluir orçamento ORC-${orc.orcamento_id}`}
+                            className="ml-1 rounded-xs p-1 text-ink-faint transition-colors duration-[var(--omni-dur-fast)] hover:bg-danger/10 hover:text-danger focus-visible:text-danger"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
                       </span>
                     </div>
 
@@ -1192,7 +1256,7 @@ function OrcamentosPage() {
                         Margem {orc.margem_lucro}%
                       </span>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -1281,6 +1345,73 @@ function OrcamentosPage() {
                 className="omni-btn omni-btn--primary"
               >
                 <Check /> Enviar para a IA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════ Modal: confirmar exclusão ══════ */}
+      {orcamentoToDelete && (
+        <div
+          className="omni-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-modal-excluir"
+        >
+          <div className="omni-modal w-full max-w-[480px]">
+            <div className="omni-modal__header">
+              <div>
+                <h2 id="titulo-modal-excluir" className="omni-h4 flex items-center gap-2">
+                  <Trash2 className="size-4 text-danger" /> Excluir orçamento
+                </h2>
+                <p className="omni-small mt-1">
+                  ORC-{orcamentoToDelete.orcamento_id} · {formatDate(orcamentoToDelete.criado_em)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrcamentoToDelete(null)}
+                className="omni-btn omni-btn--ghost omni-btn--icon omni-btn--sm"
+                aria-label="Fechar"
+              >
+                <X />
+              </button>
+            </div>
+
+            <div className="omni-modal__body omni-stack">
+              <p className="text-sm text-ink">
+                Esta ação apaga o orçamento de forma permanente, incluindo os cenários gerados e as
+                respostas do comercial. Não é possível desfazer.
+              </p>
+              <p className="line-clamp-3 rounded-md border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">
+                {orcamentoToDelete.solicitacao_original}
+              </p>
+              {orcamentoToDelete.lead_id && (
+                <p className="omni-small">
+                  O negócio vinculado ({orcamentoToDelete.leads?.lead_nome || "negócio"}) não será
+                  alterado.
+                </p>
+              )}
+            </div>
+
+            <div className="omni-modal__footer">
+              <button
+                type="button"
+                onClick={() => setOrcamentoToDelete(null)}
+                disabled={deleteOrcamentoMutation.isPending}
+                className="omni-btn omni-btn--ghost"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteOrcamentoMutation.mutate(orcamentoToDelete.orcamento_id!)}
+                disabled={deleteOrcamentoMutation.isPending}
+                className="omni-btn omni-btn--danger"
+              >
+                <Trash2 />
+                {deleteOrcamentoMutation.isPending ? "Excluindo..." : "Excluir orçamento"}
               </button>
             </div>
           </div>

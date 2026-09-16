@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  Compass,
   Handshake,
   LayoutDashboard,
   LogOut,
@@ -47,6 +48,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Operação",
     items: [
       { label: "Visão Geral", to: "/", icon: LayoutDashboard },
+      { label: "Norte 2026", to: "/norte", icon: Compass },
       { label: "Negócios", to: "/negocios", icon: Handshake, match: ["/lead"] },
       { label: "Clientes", to: "/clientes", icon: Users },
       { label: "Atendimentos", to: "/atendimentos", icon: MessagesSquare },

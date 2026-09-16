@@ -16,6 +16,7 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NegociosRouteImport } from './routes/negocios'
+import { Route as NorteRouteImport } from './routes/norte'
 import { Route as OrcamentosRouteImport } from './routes/orcamentos'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as TarefasRouteImport } from './routes/tarefas'
@@ -56,6 +57,11 @@ const NegociosRoute = NegociosRouteImport.update({
   path: '/negocios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NorteRoute = NorteRouteImport.update({
+  id: '/norte',
+  path: '/norte',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrcamentosRoute = OrcamentosRouteImport.update({
   id: '/orcamentos',
   path: '/orcamentos',
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/financeiro': typeof FinanceiroRoute
   '/login': typeof LoginRoute
   '/negocios': typeof NegociosRoute
+  '/norte': typeof NorteRoute
   '/orcamentos': typeof OrcamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/tarefas': typeof TarefasRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/financeiro': typeof FinanceiroRoute
   '/login': typeof LoginRoute
   '/negocios': typeof NegociosRoute
+  '/norte': typeof NorteRoute
   '/orcamentos': typeof OrcamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/tarefas': typeof TarefasRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/financeiro': typeof FinanceiroRoute
   '/login': typeof LoginRoute
   '/negocios': typeof NegociosRoute
+  '/norte': typeof NorteRoute
   '/orcamentos': typeof OrcamentosRoute
   '/relatorios': typeof RelatoriosRoute
   '/tarefas': typeof TarefasRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/login'
     | '/negocios'
+    | '/norte'
     | '/orcamentos'
     | '/relatorios'
     | '/tarefas'
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/login'
     | '/negocios'
+    | '/norte'
     | '/orcamentos'
     | '/relatorios'
     | '/tarefas'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/login'
     | '/negocios'
+    | '/norte'
     | '/orcamentos'
     | '/relatorios'
     | '/tarefas'
@@ -167,6 +179,7 @@ export interface RootRouteChildren {
   FinanceiroRoute: typeof FinanceiroRoute
   LoginRoute: typeof LoginRoute
   NegociosRoute: typeof NegociosRoute
+  NorteRoute: typeof NorteRoute
   OrcamentosRoute: typeof OrcamentosRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TarefasRoute: typeof TarefasRoute
@@ -224,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NegociosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/norte': {
+      id: '/norte'
+      path: '/norte'
+      fullPath: '/norte'
+      preLoaderRoute: typeof NorteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orcamentos': {
       id: '/orcamentos'
       path: '/orcamentos'
@@ -263,6 +283,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceiroRoute: FinanceiroRoute,
   LoginRoute: LoginRoute,
   NegociosRoute: NegociosRoute,
+  NorteRoute: NorteRoute,
   OrcamentosRoute: OrcamentosRoute,
   RelatoriosRoute: RelatoriosRoute,
   TarefasRoute: TarefasRoute,
